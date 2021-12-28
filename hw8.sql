@@ -7,9 +7,14 @@
  
 
 */
+
+CREATE TYPE main_functions AS (primer BOOL, intermediate BOOL, finish BOOL, internal BOOL);
+CREATE TYPE env AS (air BOOL, immersion BOOL,immersion_water BOOL, immersion_soil BOOL, immersion_chem BOOL);
+CREATE TYPE substrate AS (steel BOOL, concrete BOOL, hdg BOOL, nf_metal BOOL);
+
 CREATE TABLE products (
   	id SERIAL PRIMARY KEY,
-  	name VARCHAR(50) NOT NULL,
+  	name VARCHAR(50) NOT NULL UNIQUE,
   	brand_name_id SMALLINT NOT NULL,
   	catalog_id SMALLINT NOT NULL,
   	created_at TIMESTAMP
@@ -17,17 +22,13 @@ CREATE TABLE products (
 
 CREATE TABLE brands (
 	id SERIAL PRIMARY KEY,
-	name VARCHAR(50) NOT NULL
+	name VARCHAR(50) NOT NULL UNIQUE
 );
 
 CREATE TABLE catalogs (
 	id SERIAL PRIMARY KEY,
-	name VARCHAR(50) NOT NULL
+	name VARCHAR(50) NOT NULL UNIQUE
 );
-
-CREATE TYPE main_functions AS (primer BOOL, intermediate BOOL, finish BOOL, internal BOOL);
-CREATE TYPE env AS (air BOOL, immersion BOOL,immersion_water BOOL, immersion_soil BOOL, immersion_chem BOOL);
-CREATE TYPE substrate AS (steel BOOL, concrete BOOL, hdg BOOL, nf_metal BOOL);
 
 
 CREATE TABLE main_technical_data (
@@ -55,8 +56,7 @@ CREATE TABLE binders (
 );
 CREATE TABLE labs (
 	id SERIAL PRIMARY KEY,
-	name VARCHAR(50) NOT NULL
-
+	name VARCHAR(50) NOT NULL UNIQUE
 	
 );
 
@@ -64,6 +64,7 @@ CREATE TABLE pds (
 	product_id INT NOT NULL,
 	url VARCHAR(250) NOT NULL UNIQUE
 );
+
 CREATE TABLE approved_tests (
 	id SERIAL PRIMARY KEY,
  	lab_id INT NOT NULL,
@@ -93,10 +94,12 @@ CREATE TABLE customers (
 	id SERIAL PRIMARY KEY,
 	name VARCHAR(50) NOT NULL
 );
+
 CREATE TABLE contractors (
 	id SERIAL PRIMARY KEY,
 	name VARCHAR(50) NOT NULL
 );
+
 CREATE TABLE projects (
 	id SERIAL PRIMARY KEY,
 	name VARCHAR(50) NOT NULL,
@@ -107,7 +110,6 @@ CREATE TABLE projects (
   	started_at DATE DEFAULT NULL,
   	finished_at DATE DEFAULT NULL
 	);
-	
 	
 CREATE TABLE reports (
 	id SERIAL PRIMARY KEY,
@@ -121,8 +123,6 @@ CREATE TABLE reports (
   	updated_at TIMESTAMP DEFAULT NULL
 	);
 	
-	
-
 CREATE TABLE tsr (
 	id SMALLSERIAL PRIMARY KEY,
 	first_name VARCHAR(50) NOT NULL,
@@ -130,6 +130,15 @@ CREATE TABLE tsr (
   	email VARCHAR(120) NOT NULL UNIQUE
 
 );
+
+CREATE TABLE used_systems(
+	project_id INT NOT NULL,
+	used_system_id INT NOT NULL,
+	UNIQUE (project_id, used_system_id)
+);
+
+INSERT INTO products VALUES (1,'molestiae',10,9,'1998-11-06 01:35:14'),(2,'delectus',5,9,'1984-03-28 03:24:41'),(3,'repellendus',3,9,'1997-04-29 17:31:36'),(4,'aspernatur',8,1,'1979-02-17 15:59:35'),(5,'perferendis',15,8,'1993-12-05 13:50:58'),(6,'repudiandae',12,1,'1976-11-17 23:02:38'),(7,'optio',15,1,'1990-12-13 13:40:59'),(8,'aut',15,1,'1971-04-06 22:30:51'),(9,'sint',7,9,'2005-07-07 21:17:55'),(10,'possimus',1,1,'1981-08-02 01:35:34'),(11,'consequatur',15,4,'2000-11-17 13:05:38'),(12,'iste',9,8,'1990-03-27 08:59:22'),(13,'dignissimos',1,3,'1972-09-05 17:07:23'),(14,'cum',6,3,'2000-09-21 05:44:06'),(15,'ratione',14,5,'2020-01-27 00:42:45'),(16,'commodi',6,1,'1993-03-15 02:30:59'),(17,'sit',12,6,'2007-03-29 15:54:28'),(18,'deserunt',7,6,'1970-10-07 17:40:28'),(19,'dolore',4,7,'2016-08-05 06:36:48'),(20,'non',1,8,'2010-01-14 00:00:07'),(21,'placeat',10,5,'2004-10-28 19:41:21'),(22,'odio',13,8,'1994-07-04 03:57:54'),(23,'cupiditate',5,6,'1986-06-11 06:52:46'),(24,'a',7,1,'1998-11-11 15:39:10'),(25,'ut',2,8,'1993-02-06 03:42:48'),(26,'qui',12,4,'1995-10-22 15:05:33'),(27,'consequuntur',11,2,'2007-10-03 23:03:23'),(28,'animi',4,7,'2008-10-04 10:47:29'),(29,'ab',4,5,'1984-01-24 14:11:39'),(30,'quis',12,6,'2006-12-19 17:31:48'),(31,'excepturi',7,9,'1982-06-11 14:14:40'),(32,'est',3,9,'1976-01-12 09:20:57'),(33,'iusto',6,8,'1981-06-18 23:33:48'),(34,'asperiores',4,2,'1982-02-02 08:06:18'),(35,'quia',12,3,'1971-03-24 10:33:08'),(36,'soluta',8,6,'2011-10-02 07:19:37'),(37,'accusamus',4,8,'1991-08-14 05:51:56'),(38,'aperiam',2,7,'2020-05-29 07:34:00'),(39,'maxime',1,9,'1987-11-30 19:11:40'),(40,'velit',9,4,'2008-09-22 07:03:06'),(41,'amet',9,3,'2006-12-24 08:41:33'),(42,'et',7,8,'1991-09-15 08:38:07'),(43,'recusandae',12,3,'1991-10-14 19:07:48'),(44,'explicabo',15,4,'1995-08-30 07:37:16'),(45,'quisquam',2,8,'1983-04-14 03:10:26'),(46,'odit',7,4,'1981-07-08 05:10:02'),(47,'quae',15,3,'2014-11-30 20:19:07'),(48,'labore',10,7,'1986-09-16 19:28:33'),(49,'eius',4,8,'1997-08-19 03:57:30'),(50,'mollitia',7,7,'1993-08-25 11:50:29'),(51,'rerum',15,7,'2012-11-23 10:23:42'),(52,'voluptatem',14,9,'2014-12-10 05:17:02'),(53,'expedita',7,3,'1984-06-10 02:33:43'),(54,'necessitatibus',2,5,'2010-09-09 03:39:33'),(55,'laboriosam',3,2,'2011-02-17 00:43:32'),(56,'vero',5,9,'2007-07-07 21:40:20'),(57,'ad',8,9,'1973-01-16 05:25:18'),(58,'inventore',2,5,'2006-05-20 17:04:41'),(59,'reiciendis',11,6,'2018-01-12 20:14:52'),(60,'omnis',6,8,'1981-10-13 15:22:20'),(61,'laborum',9,4,'2019-04-23 02:11:52'),(62,'neque',15,6,'2010-11-14 15:32:18'),(63,'quam',8,2,'1975-11-04 03:36:19'),(64,'eveniet',10,1,'1992-11-27 06:38:04'),(65,'nesciunt',2,8,'2001-03-30 12:48:45'),(66,'harum',15,7,'1991-06-15 06:56:50'),(67,'culpa',6,1,'2009-09-16 17:37:40'),(68,'error',10,3,'2008-02-22 04:04:19'),(69,'veniam',10,1,'1990-03-16 11:22:39'),(70,'ipsam',6,4,'2005-05-06 07:08:13'),(71,'libero',2,4,'1981-03-06 13:45:46'),(72,'iure',8,4,'1993-07-27 07:33:26'),(73,'at',6,1,'2006-11-29 22:25:17'),(74,'sed',15,8,'1999-07-14 15:48:34'),(75,'dolores',15,5,'1981-01-09 14:01:32'),(76,'sunt',14,7,'2016-12-03 08:00:34'),(77,'fugiat',15,5,'2018-09-07 06:28:48'),(78,'ullam',2,1,'2012-09-18 03:15:29'),(79,'hic',7,3,'2021-12-16 04:04:51'),(80,'sequi',13,4,'1979-11-09 13:36:19'),(81,'rem',9,7,'1993-03-07 08:33:33'),(82,'repellat',14,9,'1970-11-12 19:27:57'),(83,'enim',2,4,'2021-10-08 23:37:28'),(84,'eum',8,3,'2012-01-28 13:48:04'),(85,'laudantium',8,7,'1982-04-01 08:54:43'),(86,'eaque',7,4,'1991-11-30 14:26:26'),(87,'illum',4,9,'2019-12-18 14:22:52'),(88,'deleniti',8,7,'2010-07-30 05:08:38'),(89,'doloremque',2,8,'1997-11-24 21:06:11'),(90,'voluptate',5,1,'2015-09-02 15:06:01'),(91,'molestias',10,1,'1980-09-02 04:08:11'),(92,'quas',10,2,'1990-09-21 17:55:52'),(93,'quidem',6,5,'2009-04-11 15:07:35'),(94,'voluptatum',4,2,'2012-10-05 19:35:12'),(95,'officia',11,5,'2017-03-11 05:01:26'),(96,'tenetur',9,3,'1998-07-30 18:50:03'),(97,'eos',15,6,'1978-07-07 19:17:42'),(98,'quasi',8,4,'1993-12-02 16:26:31'),(99,'ducimus',4,8,'1972-02-12 00:01:23'),(100,'dolor',13,8,'2018-09-16 17:30:03');
+INSERT INTO used_systems VALUES (30,2),(2,18),(19,21),(4,11),(10,14),(6,19),(3,4),(17,6),(19,22),(17,11),(20,14),(4,34),(13,22),(21,14),(31,20),(16,15),(15,20),(12,22),(17,21),(17,5),(3,13),(15,7),(6,32),(7,24),(8,9),(14,23),(7,13),(8,10),(19,3),(14,9),(17,17),(12,25),(15,16),(6,10),(7,8),(6,13),(17,18),(11,20),(5,19),(30,20),(17,2),(18,23),(18,17),(15,23),(2,8),(18,22),(10,21),(3,14),(15,3),(13,21),(20,25),(17,12),(17,30),(3,8),(5,2),(11,1),(12,17),(15,11),(10,20),(14,17),(1,14),(8,14),(2,9),(20,11),(17,25),(8,3),(12,15),(9,16),(19,10),(12,1),(12,6),(9,17),(15,22),(6,1),(16,16),(39,21),(18,1),(12,7),(13,2),(17,24),(6,23),(11,15),(28,7),(4,4),(16,21),(9,21),(1,18),(6,17),(20,17),(12,18),(18,16),(16,18),(12,23),(6,4),(9,13),(16,17),(8,7),(7,1),(4,6),(20,2);
 
 INSERT INTO reports VALUES (1,'Temporibus aut optio in tempora et earum.',50,'http://www.lebsackboehm.com/',24,'2019-03-17','1975-01-30','2014-03-24 00:09:52','1985-09-26 15:23:34'),(2,'Officia impedit aut molestias.',51,'http://hermann.info/',11,'2012-08-02','2007-12-19','1998-06-13 22:52:02','2006-02-27 12:12:37'),(3,'Sit ut modi nam et.',53,'http://denesik.org/',16,'2007-05-07','1998-05-03','2003-05-03 20:38:28','2018-09-25 03:40:48'),(4,'Amet sapiente et suscipit.',53,'http://olson.com/',18,'1987-08-13','1981-07-27','1981-03-09 12:05:11','2015-10-27 19:48:46'),(5,'Ad hic similique natus officiis sint commodi incid',55,'http://www.schroederhauck.com/',11,'2010-11-15','1984-03-05','2016-04-20 22:54:17','1988-05-03 02:54:51'),(6,'Optio veniam nihil maiores non.',58,'http://zemlakkohler.info/',26,'1978-12-06','2018-12-07','2012-01-27 03:00:23','2006-09-08 05:50:23'),(7,'Eum porro ratione dolore assumenda.',54,'http://konopelski.org/',12,'2014-09-27','1991-06-30','1996-03-28 07:58:25','2012-11-18 11:19:08'),(8,'Fugiat recusandae rerum nemo et.',46,'http://www.reynoldsschmitt.com/',19,'1998-04-21','1975-05-17','1978-02-01 17:05:05','2012-03-01 23:32:19'),(9,'Exercitationem eius earum ipsa saepe.',30,'http://nader.com/',23,'2017-06-02','1984-09-13','1994-09-22 21:39:52','2000-11-03 09:12:26'),(10,'Vel itaque iste veniam rerum qui iusto.',41,'http://batz.biz/',19,'1993-11-07','2017-03-20','2000-05-09 10:35:30','2015-02-22 00:46:31'),(11,'Eos labore facilis rerum ullam et.',31,'http://mcglynn.net/',20,'1995-09-09','2010-04-07','2017-02-04 16:08:28','2014-07-26 10:54:12'),(12,'Et aperiam odit vel blanditiis non est culpa volup',40,'http://www.becker.biz/',28,'2011-12-28','1976-08-05','2000-02-08 19:33:07','1983-10-06 11:26:30'),(13,'Velit tenetur libero excepturi similique veniam vo',56,'http://ankunding.com/',24,'1988-12-04','2012-10-07','1984-08-10 16:46:05','1980-04-06 01:49:08'),(14,'Est aut consectetur provident qui.',34,'http://www.pouros.com/',30,'1994-06-27','2005-02-13','1993-08-21 23:10:25','1994-04-16 20:23:00'),(15,'Non voluptas temporibus a iste adipisci.',61,'http://www.bartoletti.com/',20,'1972-04-02','1983-12-24','2018-01-15 11:48:00','2012-08-03 22:50:14'),(16,'Quos possimus maiores saepe sunt deleniti.',37,'http://frami.info/',28,'2021-06-11','2000-01-10','2021-01-02 05:14:50','1978-09-07 11:31:31'),(17,'Consequatur sed nobis debitis saepe et impedit.',42,'http://www.blandachamplin.com/',29,'1991-08-16','1982-10-18','2015-05-09 10:10:11','1980-08-24 10:02:13'),(18,'Iure sunt quod quos qui sed est deleniti.',52,'http://www.hodkiewicz.com/',21,'1990-06-06','2007-03-14','1970-11-05 23:18:24','2017-05-07 11:36:41'),(19,'Et eveniet culpa accusamus explicabo sunt aperiam.',50,'http://www.lindgren.com/',30,'1998-10-01','1998-01-10','2002-06-18 16:10:14','2015-05-24 04:04:26'),(20,'Et quia debitis voluptatibus ut.',52,'http://harber.info/',11,'2012-10-10','2005-08-22','1982-04-12 16:02:42','2004-05-02 11:12:26'),(21,'Modi laboriosam eveniet sit nulla quam deserunt co',60,'http://herman.com/',24,'1998-03-31','2002-08-07','2020-12-21 04:05:29','2017-03-21 04:28:06'),(22,'Sequi aut est eum fugit sed accusantium repellendu',70,'http://www.goldner.info/',20,'1972-07-13','2014-01-17','1981-12-24 23:39:53','1991-08-28 22:20:37'),(23,'Quam et officiis laudantium et possimus iure sed.',45,'http://www.welch.com/',24,'1988-12-07','1991-11-10','1970-05-04 11:55:35','2018-05-19 23:27:58'),(24,'Voluptas placeat et rerum ut magnam provident fuga',55,'http://lindlittel.com/',26,'1993-03-07','2018-10-20','1991-10-31 05:30:49','1972-03-30 06:25:35'),(25,'Rerum qui quia cupiditate architecto.',34,'http://donnelly.com/',30,'2018-05-20','1982-08-29','1996-08-13 16:38:52','1987-06-29 17:24:55'),(26,'Consequatur accusamus incidunt voluptatibus vel mo',49,'http://www.champlin.info/',29,'1997-04-05','1988-01-11','1989-04-24 08:42:00','1994-12-23 19:45:32'),(27,'Ea in placeat amet libero reprehenderit corrupti s',31,'http://doyle.net/',25,'1996-10-09','2006-01-06','1987-10-24 09:07:10','2007-09-07 13:59:10'),(28,'Et ea debitis consequatur repellat harum natus por',50,'http://murray.com/',16,'1985-03-28','2014-04-04','2000-12-15 03:10:45','1995-10-08 23:42:59'),(29,'Nam ipsam dolorem praesentium blanditiis corrupti ',47,'http://pacochareilly.com/',14,'2001-05-23','2006-07-06','2019-04-14 07:23:06','1984-02-21 22:47:06'),(30,'Et nam et doloremque temporibus corporis soluta.',56,'http://koss.net/',12,'2006-08-10','1984-06-09','1980-01-21 10:37:33','2015-10-22 22:24:45'),(31,'Dolorem error occaecati odio doloremque.',41,'http://www.erdman.com/',14,'1993-04-03','2016-05-03','2012-01-05 15:30:05','2005-11-18 11:59:50'),(32,'Iste fuga magnam dignissimos voluptas et.',59,'http://schmitt.org/',12,'1987-07-13','2008-04-11','2014-01-14 21:36:18','2010-02-25 10:07:38'),(33,'Corporis nemo qui quia maxime.',40,'http://harris.com/',18,'2000-02-18','1972-12-15','1975-04-20 22:16:47','1996-12-29 10:08:35'),(34,'Provident cumque temporibus officiis quibusdam qui',51,'http://www.effertz.com/',28,'2017-07-08','2018-10-15','1991-04-05 04:31:26','1998-03-03 04:05:16'),(35,'Deserunt voluptatem vitae accusamus nisi.',59,'http://hagenesfunk.biz/',23,'1984-07-18','1983-01-10','1987-12-04 01:25:18','2020-06-10 08:30:26'),(36,'Dolores nihil eius corrupti quos.',69,'http://www.schimmel.org/',12,'1970-10-09','2007-04-19','1997-04-26 06:57:01','2010-04-17 09:22:42'),(37,'Modi et aut quasi enim quaerat.',59,'http://www.hudson.org/',23,'1997-06-09','2000-12-24','2008-06-10 05:51:06','1984-02-08 18:33:42'),(38,'Fuga fugit consequatur eos nesciunt.',46,'http://www.oberbrunner.com/',13,'1978-03-31','2013-02-13','1984-09-06 09:25:26','2003-05-29 10:55:44'),(39,'Exercitationem voluptatem similique commodi offici',37,'http://cruickshankbaumbach.net/',11,'2006-05-12','1970-03-13','2005-07-08 16:57:42','1990-08-02 05:56:24'),(40,'Est odit autem eos autem officiis.',34,'http://www.maggio.com/',22,'1983-08-14','2005-01-19','1992-06-14 01:24:57','1992-05-31 02:35:06'),(41,'Voluptatem sequi at magni.',35,'http://mosciski.com/',16,'2018-11-11','1971-04-28','1997-03-08 07:06:19','2020-04-04 16:38:45'),(42,'Possimus aliquid nam blanditiis aut reiciendis.',36,'http://www.padberg.info/',23,'1999-02-02','1989-06-20','1992-05-07 19:03:25','2000-10-15 06:48:33'),(43,'Aliquid et maiores voluptate magni.',42,'http://www.kiehn.net/',27,'1987-10-03','1991-09-06','2004-01-13 20:28:23','2019-07-27 00:19:22'),(44,'Eius sunt aliquam repellat minus minima incidunt t',63,'http://kessler.org/',16,'2000-11-18','1985-01-03','2017-04-20 21:26:55','1978-01-19 08:50:46'),(45,'Veniam rem et est deserunt nam tempore sequi.',49,'http://greenmarks.com/',27,'2010-02-23','1997-01-02','1994-12-16 00:31:38','1999-05-15 21:52:21'),(46,'Ex labore ab a voluptate ut error.',47,'http://becker.info/',28,'1982-09-26','2004-03-31','2018-12-19 02:49:23','1977-12-08 15:47:01'),(47,'Quasi quis aut nisi et distinctio perferendis aut.',43,'http://www.gislason.net/',10,'1979-12-08','2012-01-16','2011-04-21 00:04:00','1993-04-21 19:49:23'),(48,'Dicta eligendi aliquid perspiciatis.',40,'http://www.witting.com/',11,'1979-02-16','1985-11-13','1994-02-24 17:51:17','1977-08-11 15:42:30'),(49,'Repudiandae quod molestias quia pariatur magni mod',56,'http://www.rolfson.net/',15,'1986-07-19','2001-07-29','1990-01-19 17:35:35','1988-01-08 23:25:24'),(50,'Placeat eum ea optio velit eligendi asperiores.',42,'http://www.bartonschneider.biz/',12,'1980-09-28','1974-05-19','1972-10-04 23:29:20','1996-04-17 13:15:58'),(51,'Voluptas esse totam et consequuntur exercitationem',35,'http://www.schinner.org/',18,'1976-10-25','1988-03-17','2007-11-12 20:30:10','2002-04-02 18:07:14'),(52,'Est asperiores non quis quis dolorum.',48,'http://www.franeckilebsack.com/',25,'1978-08-25','1974-12-18','2016-12-21 10:27:10','1985-04-28 18:32:30'),(53,'Sit id et qui autem architecto et.',47,'http://rodriguez.com/',26,'2016-06-13','1993-06-18','1972-05-22 03:14:36','1996-03-07 22:44:12'),(54,'Autem et sit dignissimos unde.',62,'http://www.harvey.com/',21,'2012-02-24','1983-03-17','2009-09-29 00:28:04','2003-02-23 19:42:09'),(55,'Voluptas temporibus consectetur quis facere quae a',63,'http://streicherdman.com/',13,'2002-05-21','1982-12-30','1994-03-25 22:02:54','1998-12-27 00:17:11'),(56,'Est id expedita quaerat.',54,'http://sawaynjones.com/',10,'1990-03-08','1971-05-20','1982-03-24 14:09:03','2014-08-10 09:58:23'),(57,'Doloribus nihil rem at culpa velit quo.',32,'http://www.pfannerstillzboncak.com/',18,'2006-07-09','1995-05-01','1989-04-15 20:08:48','2005-06-02 18:16:59'),(58,'Porro est corrupti tempore qui voluptatem voluptat',32,'http://www.williamson.org/',21,'1991-11-26','2000-08-19','1979-04-20 13:23:05','2014-12-08 06:21:37'),(59,'Sit omnis accusamus deleniti ut.',53,'http://wisozkferry.com/',13,'1987-07-26','1971-08-27','1987-03-13 16:08:03','1980-08-24 20:14:03'),(60,'Magni natus odio impedit.',33,'http://pagac.org/',10,'2013-09-16','1971-01-20','2009-09-18 15:55:33','2020-02-08 03:01:22'),(61,'Hic placeat qui illum aut sint magni.',42,'http://www.schmeler.org/',28,'1988-03-14','1977-10-15','1974-11-23 19:07:35','1994-04-14 20:12:48'),(62,'Possimus magni aut et possimus.',34,'http://metz.biz/',30,'1993-03-30','1999-09-28','2001-10-12 10:28:30','2013-09-25 00:52:04'),(63,'Adipisci quo natus eius adipisci velit.',36,'http://hermiston.com/',18,'1984-05-04','1993-09-03','1982-03-19 17:03:23','1993-09-20 15:29:35'),(64,'Suscipit ea temporibus unde omnis exercitationem e',45,'http://corkery.com/',22,'2019-11-23','2004-05-16','2000-08-09 15:32:32','2014-02-08 21:55:59'),(65,'Voluptate enim ad dolores.',30,'http://www.blanda.com/',13,'1993-04-20','2018-02-16','1991-11-26 04:24:19','1978-06-17 21:54:12'),(66,'Aliquid sapiente reiciendis consectetur consectetu',30,'http://hermiston.net/',20,'2014-08-24','1998-12-08','1999-05-19 18:16:37','1977-11-14 06:27:39'),(67,'Et quis dignissimos distinctio.',44,'http://www.friesen.com/',27,'2010-06-04','1973-05-26','2004-11-27 04:51:59','2011-01-13 22:23:30'),(68,'Est laudantium et ea rerum eum reiciendis voluptat',43,'http://www.durgandicki.com/',29,'2016-07-06','2013-11-13','2019-09-07 13:31:34','1985-07-31 01:54:11'),(69,'Delectus doloribus ea aspernatur.',67,'http://www.corkery.com/',26,'2017-04-27','1983-05-13','1981-12-13 23:08:47','1978-05-23 18:49:50'),(70,'Repellat ullam ut veniam.',44,'http://www.funk.biz/',26,'1992-01-30','2014-10-22','1977-07-08 02:42:58','2000-12-17 09:02:56'),(71,'Et et odit repellat nam.',49,'http://www.greenfelder.com/',26,'1972-07-28','1973-05-29','2012-03-15 13:42:10','2005-03-29 15:18:38'),(72,'Vel sint similique quis velit.',34,'http://keeling.com/',25,'2004-02-15','2015-05-12','2015-09-26 05:04:39','1975-01-09 02:56:10'),(73,'Voluptatum asperiores ut libero deleniti repudiand',42,'http://www.lemke.com/',10,'1984-01-10','2011-10-29','1994-06-10 17:46:45','2021-08-01 21:00:00'),(74,'Non impedit voluptatem aut nihil dolores magnam fu',44,'http://www.quitzonwilkinson.com/',12,'2009-10-29','2019-10-14','1970-12-27 06:22:12','1978-04-07 03:34:17'),(75,'Est amet non et est distinctio ducimus et.',66,'http://swift.net/',29,'2019-08-03','1970-11-10','2011-01-25 08:45:12','1985-08-24 05:28:18'),(76,'Laborum autem neque quasi ut ut molestias aut.',46,'http://www.murphynolan.com/',22,'1984-09-21','2016-07-06','1970-09-04 07:27:58','1989-12-21 05:14:36'),(77,'Placeat accusamus nobis nesciunt sunt corporis quo',41,'http://funk.org/',20,'1976-05-19','1979-06-26','2021-03-13 00:08:25','2016-02-08 00:06:42'),(78,'Et labore mollitia reiciendis.',34,'http://www.hirthe.com/',19,'1991-02-16','2000-04-17','2006-11-15 09:57:21','1989-06-27 01:12:35'),(79,'Nulla illo error placeat ut et qui impedit.',65,'http://gottliebhettinger.com/',10,'1986-10-11','1994-02-02','2003-04-26 14:54:00','1980-02-11 18:29:51'),(80,'Dolorem illum sit enim esse qui aut.',40,'http://www.feest.com/',17,'1975-12-19','1994-11-30','1981-04-21 09:47:56','1981-09-06 06:41:57'),(81,'Officiis fugit eveniet explicabo magni maiores quo',51,'http://okuneva.com/',29,'1994-12-11','1977-01-13','1975-07-15 14:28:26','1987-09-15 09:28:59'),(82,'Dolores qui voluptas iusto.',64,'http://www.kutchherman.net/',25,'1972-07-26','1970-09-06','1973-01-17 03:03:27','2019-05-19 09:43:22'),(83,'Vel quia eos consequatur eveniet laboriosam.',67,'http://parisianjacobson.info/',26,'2015-08-17','1997-01-30','1993-03-03 21:32:26','1985-03-06 10:14:36'),(84,'Voluptas soluta autem recusandae enim sit officiis',54,'http://spinka.com/',18,'2019-01-31','1992-02-02','2005-09-02 04:59:48','2005-05-02 10:54:04'),(85,'Debitis dolorem consequuntur provident debitis ill',37,'http://gusikowski.com/',26,'2010-04-13','2011-12-20','1987-02-27 01:25:21','2013-01-26 08:15:07'),(86,'Provident sunt et quasi culpa perspiciatis quos sa',51,'http://www.gerhold.com/',13,'1998-09-19','1986-08-19','1976-06-03 06:03:12','1974-07-26 18:51:31'),(87,'Rerum commodi sed enim autem aspernatur et.',39,'http://murazik.com/',15,'2015-04-19','2000-07-29','1991-01-12 09:30:37','1993-12-25 18:45:03'),(88,'Et beatae vitae officia aperiam.',54,'http://www.hilllpfeffer.org/',18,'2019-11-12','1986-07-07','1983-05-05 22:00:03','2014-08-26 10:05:01'),(89,'Similique expedita tempore veniam omnis deleniti.',65,'http://www.cruickshankemmerich.com/',25,'1994-09-15','1980-09-29','2017-08-22 23:15:15','2012-06-29 19:48:41'),(90,'A facilis eius beatae eum officiis eos sint.',41,'http://runolfsson.org/',27,'1977-09-15','2010-10-19','1981-03-20 05:51:30','2003-01-13 05:08:45'),(91,'Id labore qui quia placeat dolores ut sunt.',70,'http://www.reichert.info/',22,'2003-02-17','1991-07-28','1980-04-26 22:34:06','2000-05-20 12:48:04'),(92,'Officiis vero est nihil aut sed.',46,'http://nienowspinka.com/',24,'1973-03-02','1977-11-13','1992-08-30 05:25:07','2001-09-27 04:34:57'),(93,'Asperiores aut corrupti molestiae corporis in sunt',44,'http://www.gislasonrunolfsdottir.org/',22,'1999-01-05','1970-05-04','2015-07-21 07:11:18','2011-11-27 14:30:22'),(94,'Aliquam enim aperiam voluptatem aut in.',47,'http://www.stehrrippin.com/',16,'1990-11-23','1984-01-14','2002-11-24 07:46:15','1985-09-14 10:40:01'),(95,'Sunt dicta aut iste aut veritatis est sunt.',40,'http://www.dickinson.com/',12,'1985-12-19','1986-07-01','1977-07-29 23:52:23','2017-01-31 19:35:27'),(96,'Nostrum ratione voluptas ut cupiditate quia libero',63,'http://jakubowski.biz/',16,'2003-05-11','1971-02-24','2001-11-30 16:29:32','1984-10-02 00:30:02'),(97,'At omnis qui cum aut aut officia.',31,'http://erdman.info/',28,'1997-08-18','2001-01-15','1986-06-11 00:52:45','2015-02-22 20:49:55'),(98,'Dolorem quasi aut adipisci ut inventore.',33,'http://www.braun.com/',14,'2003-03-28','2000-11-24','1999-06-29 17:09:06','1970-03-08 22:47:23'),(99,'Maxime deleniti in autem libero ab nobis non.',50,'http://www.strosin.com/',19,'1992-09-16','1994-01-29','2000-12-19 00:08:38','1989-05-10 20:37:43'),(100,'Et minima soluta nisi et nam ut.',36,'http://witting.com/',12,'1975-01-05','2012-11-24','1981-09-28 22:24:32','2011-04-03 00:54:20');
 
@@ -733,108 +742,6 @@ INSERT INTO pds (product_id, url) VALUES (66, 'http://www.wiegand.org/');
 INSERT INTO pds (product_id, url) VALUES (60, 'http://www.willms.com/');
 INSERT INTO pds (product_id, url) VALUES (53, 'http://www.wisozktoy.net/');
 
-
-
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('1', 'autem', 1, 1, '2018-12-06 13:39:59');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('2', 'nisi', 2, 2, '2011-01-10 05:45:29');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('3', 'accusamus', 3, 3, '2016-06-01 08:20:11');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('4', 'iste', 4, 4, '2008-09-20 17:04:04');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('5', 'ab', 5, 5, '1979-10-29 05:22:22');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('6', 'incidunt', 6, 1, '1970-12-11 06:33:49');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('7', 'repudiandae', 7, 2, '2006-02-18 18:17:31');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('8', 'molestiae', 8, 3, '1973-07-13 19:36:21');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('9', 'reiciendis', 9, 4, '1997-05-21 04:04:51');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('10', 'assumenda', 10, 5, '1998-04-01 01:14:51');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('11', 'tenetur', 11, 1, '1984-12-14 23:55:51');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('12', 'non', 12, 2, '2007-03-05 22:41:26');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('13', 'voluptates', 13, 3, '1997-07-05 23:17:55');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('14', 'nostrum', 14, 4, '2012-10-03 08:14:35');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('15', 'autem', 15, 5, '2017-08-05 09:47:29');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('16', 'qui', 1, 1, '2021-08-21 03:20:06');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('17', 'provident', 2, 2, '2016-05-27 12:22:05');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('18', 'consequatur', 3, 3, '1976-10-22 05:07:29');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('19', 'animi', 4, 4, '2017-05-31 15:44:17');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('20', 'non', 5, 5, '1980-08-24 15:25:17');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('21', 'est', 6, 1, '2005-07-29 23:36:39');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('22', 'et', 7, 2, '1972-04-25 22:15:35');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('23', 'qui', 8, 3, '2020-04-10 21:12:01');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('24', 'non', 9, 4, '1982-10-22 01:08:34');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('25', 'et', 10, 5, '1983-03-18 04:44:35');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('26', 'qui', 11, 1, '2011-10-26 19:28:50');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('27', 'numquam', 12, 2, '1996-08-23 07:45:32');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('28', 'impedit', 13, 3, '2008-12-30 10:08:15');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('29', 'non', 14, 4, '1986-02-22 21:37:53');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('30', 'odit', 15, 5, '2004-03-18 10:36:28');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('31', 'expedita', 1, 1, '1971-12-15 23:26:51');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('32', 'dolorum', 2, 2, '2010-01-10 04:28:37');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('33', 'non', 3, 3, '2002-11-22 11:46:51');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('34', 'laudantium', 4, 4, '1991-10-07 14:41:55');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('35', 'maiores', 5, 5, '1980-03-27 13:01:43');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('36', 'animi', 6, 1, '2004-11-18 00:03:53');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('37', 'cupiditate', 7, 2, '1985-08-23 17:58:03');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('38', 'doloremque', 8, 3, '2019-03-17 11:21:55');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('39', 'similique', 9, 4, '1999-07-25 23:39:25');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('40', 'qui', 10, 5, '1992-11-30 21:04:09');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('41', 'voluptatem', 11, 1, '2005-03-19 23:09:54');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('42', 'doloribus', 12, 2, '2000-11-06 04:03:51');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('43', 'perferendis', 13, 3, '1972-07-16 17:52:57');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('44', 'sit', 14, 4, '1983-08-25 14:10:00');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('45', 'facere', 15, 5, '1975-03-21 22:48:58');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('46', 'iste', 1, 1, '1971-12-04 16:09:51');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('47', 'et', 2, 2, '2004-11-18 21:02:13');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('48', 'deserunt', 3, 3, '2002-03-06 08:00:06');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('49', 'voluptate', 4, 4, '1976-09-18 23:42:34');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('50', 'non', 5, 5, '2014-10-09 12:16:08');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('51', 'exercitationem', 6, 1, '1991-08-27 23:22:43');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('52', 'natus', 7, 2, '2014-06-08 18:45:17');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('53', 'voluptatem', 8, 3, '2009-11-09 16:01:17');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('54', 'repudiandae', 9, 4, '2010-04-11 19:06:38');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('55', 'aliquid', 10, 5, '2002-03-03 02:39:23');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('56', 'nostrum', 11, 1, '1975-12-23 10:41:15');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('57', 'qui', 12, 2, '1990-06-16 17:53:04');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('58', 'veniam', 13, 3, '1988-10-29 23:32:52');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('59', 'velit', 14, 4, '2015-10-08 10:49:40');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('60', 'voluptatem', 15, 5, '1971-11-21 14:22:09');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('61', 'aliquid', 1, 1, '1990-04-22 08:43:59');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('62', 'sint', 2, 2, '1981-11-09 12:49:46');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('63', 'nihil', 3, 3, '1994-04-17 22:20:06');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('64', 'deleniti', 4, 4, '2002-05-07 03:44:07');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('65', 'molestiae', 5, 5, '1991-11-12 10:48:49');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('66', 'voluptates', 6, 1, '2005-11-26 22:24:51');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('67', 'occaecati', 7, 2, '2021-01-21 10:48:00');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('68', 'quo', 8, 3, '2019-09-20 02:34:57');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('69', 'deserunt', 9, 4, '2012-10-11 23:42:36');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('70', 'et', 10, 5, '1971-03-30 21:02:54');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('71', 'deserunt', 11, 1, '1994-11-07 21:07:49');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('72', 'cupiditate', 12, 2, '1970-03-19 22:37:33');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('73', 'commodi', 13, 3, '1973-01-02 06:47:49');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('74', 'cumque', 14, 4, '2019-10-07 00:47:38');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('75', 'ipsum', 15, 5, '2020-01-13 20:25:44');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('76', 'cupiditate', 1, 1, '2018-09-30 08:23:27');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('77', 'aut', 2, 2, '1978-05-11 05:17:27');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('78', 'omnis', 3, 3, '1984-10-14 01:49:01');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('79', 'autem', 4, 4, '2013-04-26 06:57:22');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('80', 'sit', 5, 5, '1983-06-28 11:44:24');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('81', 'accusamus', 6, 1, '1982-02-08 15:02:41');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('82', 'sunt', 7, 2, '2014-06-22 03:58:34');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('83', 'est', 8, 3, '2003-03-18 04:11:25');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('84', 'atque', 9, 4, '2011-04-11 19:33:32');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('85', 'pariatur', 10, 5, '2003-10-26 11:45:20');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('86', 'tenetur', 11, 1, '1996-05-23 08:26:03');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('87', 'optio', 12, 2, '2009-03-10 02:47:41');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('88', 'aut', 13, 3, '1992-12-11 11:22:59');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('89', 'fugiat', 14, 4, '2003-10-10 19:27:57');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('90', 'dignissimos', 15, 5, '1998-11-11 12:59:37');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('91', 'enim', 1, 1, '1986-02-16 11:38:00');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('92', 'quod', 2, 2, '1986-11-18 06:14:56');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('93', 'minus', 3, 3, '2001-12-31 06:19:28');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('94', 'id', 4, 4, '2016-11-02 13:07:27');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('95', 'magnam', 5, 5, '2004-11-18 00:23:09');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('96', 'in', 6, 1, '2018-03-30 08:37:08');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('97', 'quia', 7, 2, '1975-10-26 10:04:16');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('98', 'eum', 8, 3, '1996-02-05 07:56:16');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('99', 'dicta', 9, 4, '1983-11-11 09:40:00');
-INSERT INTO products (id, name, brand_name_id, catalog_id, created_at) VALUES ('100', 'culpa', 10, 5, '1987-07-25 05:10:03');
 
 
 

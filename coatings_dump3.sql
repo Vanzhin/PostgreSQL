@@ -59,6 +59,60 @@ CREATE TYPE public.substrate AS (
 
 ALTER TYPE public.substrate OWNER TO gb_user;
 
+--
+-- Name: check_coat_types(); Type: FUNCTION; Schema: public; Owner: gb_user
+--
+
+CREATE FUNCTION public.check_coat_types() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE same BOOLEAN;
+BEGIN
+IF ((SELECT catalogs.id FROM products
+JOIN catalogs ON products.catalog_id = catalogs.id
+WHERE products.id = NEW.primer_id) = (SELECT catalogs.id FROM products
+JOIN catalogs ON products.catalog_id = catalogs.id
+WHERE products.id = NEW.intermediate_id) AND (SELECT catalogs.id FROM products
+JOIN catalogs ON products.catalog_id = catalogs.id
+WHERE products.id = NEW.primer_id) = (SELECT catalogs.id FROM products
+JOIN catalogs ON products.catalog_id = catalogs.id
+WHERE products.id = NEW.finish_id))
+THEN
+  RETURN NEW;
+  END IF; 
+  RAISE NOTICE 'coating catalogs are not the same';
+END
+$$;
+
+
+ALTER FUNCTION public.check_coat_types() OWNER TO gb_user;
+
+--
+-- Name: most_used_finish_in(character varying); Type: FUNCTION; Schema: public; Owner: gb_user
+--
+
+CREATE FUNCTION public.most_used_finish_in(catalog_name character varying) RETURNS character varying
+    LANGUAGE sql
+    AS $$
+  WITH most_used AS(
+	SELECT DISTINCT 
+	  	products.name AS product_name,
+		COUNT (coating_systems.finish_id) OVER (PARTITION BY products.name) AS count_product 
+	FROM used_systems
+	JOIN coating_systems ON coating_systems.id = used_systems.used_system_id
+	JOIN products ON products.id = coating_systems.finish_id
+	JOIN catalogs ON catalogs.id = products.catalog_id
+	WHERE catalogs.name = catalog_name
+	ORDER BY count_product DESC
+)
+SELECT  product_name
+FROM most_used
+LIMIT 1; 
+$$;
+
+
+ALTER FUNCTION public.most_used_finish_in(catalog_name character varying) OWNER TO gb_user;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -347,6 +401,84 @@ ALTER SEQUENCE public.labs_id_seq OWNED BY public.labs.id;
 
 
 --
+-- Name: projects; Type: TABLE; Schema: public; Owner: gb_user
+--
+
+CREATE TABLE public.projects (
+    id integer NOT NULL,
+    name character varying(50) NOT NULL,
+    customer_id integer NOT NULL,
+    contractor_id integer NOT NULL,
+    comments text,
+    started_at date,
+    finished_at date
+);
+
+
+ALTER TABLE public.projects OWNER TO gb_user;
+
+--
+-- Name: reports; Type: TABLE; Schema: public; Owner: gb_user
+--
+
+CREATE TABLE public.reports (
+    id integer NOT NULL,
+    name character varying(50) NOT NULL,
+    project_id integer NOT NULL,
+    url character varying(250) NOT NULL,
+    tsr_id smallint NOT NULL,
+    started_at date,
+    finished_at date,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone
+);
+
+
+ALTER TABLE public.reports OWNER TO gb_user;
+
+--
+-- Name: tsr; Type: TABLE; Schema: public; Owner: gb_user
+--
+
+CREATE TABLE public.tsr (
+    id smallint NOT NULL,
+    first_name character varying(50) NOT NULL,
+    last_name character varying(50) NOT NULL,
+    email character varying(120) NOT NULL
+);
+
+
+ALTER TABLE public.tsr OWNER TO gb_user;
+
+--
+-- Name: last_reports_projects; Type: VIEW; Schema: public; Owner: gb_user
+--
+
+CREATE VIEW public.last_reports_projects AS
+ WITH last_reports AS (
+         SELECT projects.id AS project_id,
+            projects.name AS project_name,
+            reports.id AS report_id,
+            reports.updated_at,
+            (((tsr.first_name)::text || ' '::text) || (tsr.last_name)::text) AS tsr_name,
+            max(reports.updated_at) OVER (PARTITION BY projects.id) AS last_date
+           FROM ((public.projects
+             LEFT JOIN public.reports ON ((reports.project_id = projects.id)))
+             LEFT JOIN public.tsr ON ((tsr.id = reports.tsr_id)))
+          ORDER BY projects.id
+        )
+ SELECT last_reports.project_id,
+    last_reports.project_name,
+    last_reports.report_id,
+    last_reports.last_date,
+    last_reports.tsr_name
+   FROM last_reports
+  WHERE ((last_reports.last_date = last_reports.updated_at) OR (last_reports.last_date IS NULL));
+
+
+ALTER TABLE public.last_reports_projects OWNER TO gb_user;
+
+--
 -- Name: main_technical_data; Type: TABLE; Schema: public; Owner: gb_user
 --
 
@@ -420,25 +552,6 @@ ALTER SEQUENCE public.products_id_seq OWNED BY public.products.id;
 
 
 --
--- Name: projects; Type: TABLE; Schema: public; Owner: gb_user
---
-
-CREATE TABLE public.projects (
-    id integer NOT NULL,
-    name character varying(50) NOT NULL,
-    customer_id integer NOT NULL,
-    contractor_id integer NOT NULL,
-    system_ids integer[],
-    comments text,
-    started_at date,
-    finished_at date,
-    main_system_id integer DEFAULT 1 NOT NULL
-);
-
-
-ALTER TABLE public.projects OWNER TO gb_user;
-
---
 -- Name: projects_id_seq; Type: SEQUENCE; Schema: public; Owner: gb_user
 --
 
@@ -459,25 +572,6 @@ ALTER TABLE public.projects_id_seq OWNER TO gb_user;
 
 ALTER SEQUENCE public.projects_id_seq OWNED BY public.projects.id;
 
-
---
--- Name: reports; Type: TABLE; Schema: public; Owner: gb_user
---
-
-CREATE TABLE public.reports (
-    id integer NOT NULL,
-    name character varying(50) NOT NULL,
-    project_id integer NOT NULL,
-    url character varying(250) NOT NULL,
-    tsr_id smallint NOT NULL,
-    started_at date,
-    finished_at date,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp without time zone
-);
-
-
-ALTER TABLE public.reports OWNER TO gb_user;
 
 --
 -- Name: reports_id_seq; Type: SEQUENCE; Schema: public; Owner: gb_user
@@ -536,18 +630,32 @@ ALTER SEQUENCE public.standards_id_seq OWNED BY public.standards.id;
 
 
 --
--- Name: tsr; Type: TABLE; Schema: public; Owner: gb_user
+-- Name: used_systems; Type: TABLE; Schema: public; Owner: gb_user
 --
 
-CREATE TABLE public.tsr (
-    id smallint NOT NULL,
-    first_name character varying(50) NOT NULL,
-    last_name character varying(50) NOT NULL,
-    email character varying(120) NOT NULL
+CREATE TABLE public.used_systems (
+    project_id integer NOT NULL,
+    used_system_id integer NOT NULL
 );
 
 
-ALTER TABLE public.tsr OWNER TO gb_user;
+ALTER TABLE public.used_systems OWNER TO gb_user;
+
+--
+-- Name: tests_to_update; Type: VIEW; Schema: public; Owner: gb_user
+--
+
+CREATE VIEW public.tests_to_update AS
+ SELECT projects.id AS project_id,
+    used_systems.used_system_id AS system_id,
+    approved_tests.expires_at
+   FROM ((public.projects
+     JOIN public.used_systems ON ((used_systems.project_id = projects.id)))
+     JOIN public.approved_tests ON ((approved_tests.system_id = used_systems.used_system_id)))
+  WHERE ((date_part('year'::text, projects.finished_at) >= date_part('year'::text, CURRENT_DATE)) AND ((date_part('year'::text, approved_tests.expires_at) >= date_part('year'::text, CURRENT_DATE)) AND (approved_tests.expires_at >= CURRENT_DATE)));
+
+
+ALTER TABLE public.tests_to_update OWNER TO gb_user;
 
 --
 -- Name: tsr_id_seq; Type: SEQUENCE; Schema: public; Owner: gb_user
@@ -687,23 +795,19 @@ COPY public.approved_tests (id, lab_id, system_id, standard_id, comments, url, i
 48	10	48	48	Porro sed voluptas velit labore culpa consequuntur. Unde ipsa tempore ullam. Iste repellendus autem ipsam quia.	http://www.flatleystamm.com/	1975-09-09	1995-08-23
 51	3	51	1	Quia est possimus sed. Qui quis quas et temporibus odio explicabo voluptates. Magnam numquam earum qui veritatis suscipit soluta magnam. Adipisci fuga debitis consequatur esse ullam.	http://jones.com/	1981-02-23	2006-02-28
 54	3	54	4	Voluptas natus dolor ipsa in odio hic. In minus et labore voluptatum odit. Sapiente et consequatur impedit ullam commodi id illum. Aperiam qui autem aliquam ea aut porro quo laboriosam.	http://www.kunze.info/	1981-11-01	2001-05-25
-57	10	57	7	Facilis unde est est modi aut. Labore aperiam et voluptatem reiciendis ex omnis molestiae. Ducimus similique sit praesentium excepturi qui non. Quisquam laboriosam qui repellendus.	http://www.hauck.net/	1994-04-11	1995-08-27
 60	8	60	10	Sit ducimus dolor omnis corporis id mollitia facilis. Labore earum quas est nostrum sit. Error eos tenetur distinctio dolore. Et veniam ipsum in ad totam magnam totam.	http://www.jaskolski.com/	2011-09-04	2013-05-03
 61	11	61	11	Fugiat quisquam repellendus ea magnam natus. Ut perspiciatis est vero. Nesciunt voluptatem cupiditate repellendus iure eius commodi. Nam vel quo veritatis et consequatur magnam impedit. Dolor blanditiis sint voluptas sint aliquam id.	http://gibson.info/	1975-12-09	2005-11-05
-63	7	63	13	Dolores quia ipsum veniam eius earum dicta id. Tempore velit nihil vero repudiandae corrupti atque. Sed quidem impedit qui dolorem sit et sit.	http://www.brekke.biz/	1975-08-31	1998-06-23
 64	6	64	14	Quis omnis et porro occaecati eum qui. Atque eligendi fugiat ut autem. Est dolorem quidem et.	http://balistreri.com/	1990-11-15	2017-11-22
 66	15	66	16	Eos hic nulla accusamus et illum optio. Inventore aspernatur est omnis. Nesciunt quas eius veniam et aut magnam.	http://romaguera.biz/	1983-08-17	2005-09-02
 67	3	67	17	Nostrum exercitationem beatae hic perferendis et tempora eligendi hic. Asperiores fugiat vitae quis quia beatae facere et molestias. Sit voluptatem similique excepturi qui est error.	http://daviscrona.com/	1979-08-24	1993-09-28
 72	6	72	22	Eos libero omnis nam odit fuga omnis enim. Beatae dignissimos qui natus consequatur nobis ab ex.	http://www.hills.org/	1983-12-23	2010-05-21
 73	5	73	23	Voluptatem excepturi officiis molestiae. In eos repudiandae officiis tempora. Sed libero sint id voluptatem.	http://www.cummerata.org/	1995-09-09	2003-12-22
-75	15	75	25	Rem dolorem a quia nulla atque expedita occaecati. Excepturi voluptas nihil est placeat distinctio beatae voluptates magni. Illum exercitationem modi delectus aut itaque inventore.	http://hoppe.biz/	1985-04-21	2006-08-20
 78	14	78	28	Ad vero recusandae exercitationem quae nulla qui odio. Autem quia omnis reiciendis. Quo impedit fugiat expedita laudantium.	http://www.stark.biz/	1985-10-08	1990-09-28
 82	2	82	32	Beatae nisi omnis illum accusamus. Accusamus hic eos qui modi. Molestias repellat aperiam magnam veritatis.	http://flatleyrowe.com/	1991-11-30	2014-08-09
 84	3	84	34	Dicta aperiam at veritatis facere totam neque et. Eos facilis et nobis non provident architecto molestiae minima. Sit et nemo odit id facilis.	http://www.zieme.com/	1996-01-10	1998-06-22
 85	4	85	35	Quaerat deserunt dignissimos neque ex atque et quisquam quae. Voluptate explicabo sint assumenda. Dolorem rerum nam placeat ut consequatur est. Rerum ab rerum quia dolores.	http://www.hartmann.com/	1971-11-21	1989-01-11
+7	15	7	7	Laborum ut provident dicta non optio officia unde. Eos cum voluptate aut laboriosam libero beatae. Atque numquam enim atque molestiae quam et.	http://kub.com/	1980-06-14	2017-11-22
 88	11	88	38	Est fugiat quaerat architecto omnis. Unde rerum earum voluptatem dolores aut. Dolores quae veniam officiis omnis. Provident aut itaque voluptas molestiae corrupti.	http://quitzonkassulke.net/	1974-04-14	1985-06-29
-92	8	92	42	Voluptatem debitis dolores omnis quos ducimus voluptas perspiciatis. Explicabo qui eveniet sint eius ad qui unde. Est debitis ipsam aperiam ut.	http://effertz.net/	1971-08-26	1995-08-22
-95	7	95	45	Et eos amet voluptas quod dolorem recusandae accusamus consequatur. Explicabo repudiandae provident magni natus. Non mollitia quo voluptate at odio veniam.	http://www.schimmelmiller.biz/	1987-06-27	2004-11-18
 2	2	2	2	Perspiciatis aliquam officia nobis. Quidem aut est odio aut id distinctio asperiores. Repellat facilis molestias nihil deserunt. Ut eveniet hic officia explicabo voluptas. Deserunt qui dicta aliquam reiciendis debitis.	http://keeling.com/	2011-10-08	2022-12-23
 6	2	6	6	Sequi laudantium ut facilis qui non. Necessitatibus et sunt quas sint deleniti nostrum.	http://www.harris.info/	2021-12-21	2022-12-23
 15	13	15	15	Ab totam labore eligendi illo. Animi pariatur expedita pariatur corrupti porro velit perspiciatis.	http://www.sawayn.com/	2016-06-28	2022-12-23
@@ -735,7 +839,6 @@ COPY public.approved_tests (id, lab_id, system_id, standard_id, comments, url, i
 97	3	97	47	Non sed ex ut et quasi at facilis. Optio quasi quo natus perspiciatis minima et occaecati molestiae. A et qui dolor pariatur qui ut est.	http://hintz.info/	2008-06-21	2022-12-23
 100	13	100	50	Deserunt temporibus totam perspiciatis voluptatem molestiae ipsum assumenda. Voluptatum delectus est dolor explicabo nesciunt mollitia voluptatem. Qui rerum ipsam cum illum rerum perspiciatis. Voluptatem eum consequatur iusto odio tempora.	http://yundtrowe.org/	2018-12-11	2022-12-23
 4	15	4	4	Voluptatem ratione fuga ea labore ea amet beatae adipisci. Sunt sint incidunt doloremque eos in. In voluptates ratione ipsum ut nihil. Quo totam iure sit occaecati nobis.	http://mclaughlin.com/	1972-12-21	1986-03-05
-7	15	7	7	Laborum ut provident dicta non optio officia unde. Eos cum voluptate aut laboriosam libero beatae. Atque numquam enim atque molestiae quam et.	http://kub.com/	1980-06-14	2017-11-22
 8	15	8	8	Consectetur nemo est itaque voluptas nostrum praesentium. Voluptas eos explicabo sit. Qui ut perferendis et ut.	http://www.sporer.com/	1976-12-24	2005-04-15
 21	15	21	21	Consequatur ipsam et tempora corrupti minus repellendus reprehenderit. Rem magni dolor reprehenderit tenetur minus quia. Porro rerum dolores harum et.	http://flatleybrakus.info/	1981-04-17	1986-02-06
 38	15	38	38	Qui nesciunt delectus exercitationem deserunt. Est et fugit maxime culpa autem facilis dolores. Cupiditate ut voluptatem voluptatem delectus deserunt quos assumenda animi. Eos consequatur quas odio aperiam ipsam voluptate. Corporis voluptatem autem qui enim architecto vero eos animi.	http://gleichnerkuhlman.biz/	1976-09-01	1983-06-20
@@ -767,6 +870,11 @@ COPY public.approved_tests (id, lab_id, system_id, standard_id, comments, url, i
 83	15	83	33	Voluptatem expedita eius nobis et. Explicabo eum aut consectetur aliquid necessitatibus. Voluptatum eum culpa asperiores qui. Eos nemo tempora eos voluptas maxime dolores.	http://ryan.com/	1987-05-24	2022-12-23
 91	15	91	41	Rerum officiis nisi rerum esse veritatis blanditiis. Et ut ullam numquam doloribus enim sequi. Dolorem consequatur assumenda qui officia id iusto cumque nulla.	http://boyle.net/	2005-01-20	2022-12-23
 99	15	99	49	Earum dolor minus quia aliquam. Qui ipsum consequatur quam. Veritatis veniam distinctio molestiae necessitatibus mollitia et reprehenderit.	http://www.mckenzie.com/	2021-01-21	2022-12-23
+57	10	57	7	Facilis unde est est modi aut. Labore aperiam et voluptatem reiciendis ex omnis molestiae. Ducimus similique sit praesentium excepturi qui non. Quisquam laboriosam qui repellendus.	http://www.hauck.net/	1994-04-11	2021-08-27
+63	7	63	13	Dolores quia ipsum veniam eius earum dicta id. Tempore velit nihil vero repudiandae corrupti atque. Sed quidem impedit qui dolorem sit et sit.	http://www.brekke.biz/	1975-08-31	1921-06-23
+75	15	75	25	Rem dolorem a quia nulla atque expedita occaecati. Excepturi voluptas nihil est placeat distinctio beatae voluptates magni. Illum exercitationem modi delectus aut itaque inventore.	http://hoppe.biz/	1985-04-21	2021-08-20
+92	8	92	42	Voluptatem debitis dolores omnis quos ducimus voluptas perspiciatis. Explicabo qui eveniet sint eius ad qui unde. Est debitis ipsam aperiam ut.	http://effertz.net/	1971-08-26	2021-08-22
+95	7	95	45	Et eos amet voluptas quod dolorem recusandae accusamus consequatur. Explicabo repudiandae provident magni natus. Non mollitia quo voluptate at odio veniam.	http://www.schimmelmiller.biz/	1987-06-27	2021-11-18
 \.
 
 
@@ -929,6 +1037,8 @@ COPY public.coating_systems (id, primer_id, primer_dft, intermediate_id, interme
 98	5	184	33	74	97	54
 99	10	202	40	59	62	200
 100	12	239	50	209	98	219
+101	9	224	4	211	30	222
+102	9	224	4	211	30	222
 \.
 
 
@@ -1342,106 +1452,106 @@ COPY public.pds (product_id, url) FROM stdin;
 --
 
 COPY public.products (id, name, brand_name_id, catalog_id, created_at) FROM stdin;
-1	autem	1	1	2018-12-06 13:39:59
-2	nisi	2	2	2011-01-10 05:45:29
-3	accusamus	3	3	2016-06-01 08:20:11
-4	iste	4	4	2008-09-20 17:04:04
-5	ab	5	5	1979-10-29 05:22:22
-6	incidunt	6	1	1970-12-11 06:33:49
-7	repudiandae	7	2	2006-02-18 18:17:31
-8	molestiae	8	3	1973-07-13 19:36:21
-9	reiciendis	9	4	1997-05-21 04:04:51
-10	assumenda	10	5	1998-04-01 01:14:51
-11	tenetur	11	1	1984-12-14 23:55:51
-12	non	12	2	2007-03-05 22:41:26
-13	voluptates	13	3	1997-07-05 23:17:55
-14	nostrum	14	4	2012-10-03 08:14:35
-15	autem	15	5	2017-08-05 09:47:29
-16	qui	1	1	2021-08-21 03:20:06
-17	provident	2	2	2016-05-27 12:22:05
-18	consequatur	3	3	1976-10-22 05:07:29
-19	animi	4	4	2017-05-31 15:44:17
-20	non	5	5	1980-08-24 15:25:17
-21	est	6	1	2005-07-29 23:36:39
-22	et	7	2	1972-04-25 22:15:35
-23	qui	8	3	2020-04-10 21:12:01
-24	non	9	4	1982-10-22 01:08:34
-25	et	10	5	1983-03-18 04:44:35
-26	qui	11	1	2011-10-26 19:28:50
-27	numquam	12	2	1996-08-23 07:45:32
-28	impedit	13	3	2008-12-30 10:08:15
-29	non	14	4	1986-02-22 21:37:53
-30	odit	15	5	2004-03-18 10:36:28
-31	expedita	1	1	1971-12-15 23:26:51
-32	dolorum	2	2	2010-01-10 04:28:37
-33	non	3	3	2002-11-22 11:46:51
-34	laudantium	4	4	1991-10-07 14:41:55
-35	maiores	5	5	1980-03-27 13:01:43
-36	animi	6	1	2004-11-18 00:03:53
-37	cupiditate	7	2	1985-08-23 17:58:03
-38	doloremque	8	3	2019-03-17 11:21:55
-39	similique	9	4	1999-07-25 23:39:25
-40	qui	10	5	1992-11-30 21:04:09
-41	voluptatem	11	1	2005-03-19 23:09:54
-42	doloribus	12	2	2000-11-06 04:03:51
-43	perferendis	13	3	1972-07-16 17:52:57
-44	sit	14	4	1983-08-25 14:10:00
-45	facere	15	5	1975-03-21 22:48:58
-46	iste	1	1	1971-12-04 16:09:51
-47	et	2	2	2004-11-18 21:02:13
-48	deserunt	3	3	2002-03-06 08:00:06
-49	voluptate	4	4	1976-09-18 23:42:34
-50	non	5	5	2014-10-09 12:16:08
-51	exercitationem	6	1	1991-08-27 23:22:43
-52	natus	7	2	2014-06-08 18:45:17
-53	voluptatem	8	3	2009-11-09 16:01:17
-54	repudiandae	9	4	2010-04-11 19:06:38
-55	aliquid	10	5	2002-03-03 02:39:23
-56	nostrum	11	1	1975-12-23 10:41:15
-57	qui	12	2	1990-06-16 17:53:04
-58	veniam	13	3	1988-10-29 23:32:52
-59	velit	14	4	2015-10-08 10:49:40
-60	voluptatem	15	5	1971-11-21 14:22:09
-61	aliquid	1	1	1990-04-22 08:43:59
-62	sint	2	2	1981-11-09 12:49:46
-63	nihil	3	3	1994-04-17 22:20:06
-64	deleniti	4	4	2002-05-07 03:44:07
-65	molestiae	5	5	1991-11-12 10:48:49
-66	voluptates	6	1	2005-11-26 22:24:51
-67	occaecati	7	2	2021-01-21 10:48:00
-68	quo	8	3	2019-09-20 02:34:57
-69	deserunt	9	4	2012-10-11 23:42:36
-70	et	10	5	1971-03-30 21:02:54
-71	deserunt	11	1	1994-11-07 21:07:49
-72	cupiditate	12	2	1970-03-19 22:37:33
-73	commodi	13	3	1973-01-02 06:47:49
-74	cumque	14	4	2019-10-07 00:47:38
-75	ipsum	15	5	2020-01-13 20:25:44
-76	cupiditate	1	1	2018-09-30 08:23:27
-77	aut	2	2	1978-05-11 05:17:27
-78	omnis	3	3	1984-10-14 01:49:01
-79	autem	4	4	2013-04-26 06:57:22
-80	sit	5	5	1983-06-28 11:44:24
-81	accusamus	6	1	1982-02-08 15:02:41
-82	sunt	7	2	2014-06-22 03:58:34
-83	est	8	3	2003-03-18 04:11:25
-84	atque	9	4	2011-04-11 19:33:32
-85	pariatur	10	5	2003-10-26 11:45:20
-86	tenetur	11	1	1996-05-23 08:26:03
-87	optio	12	2	2009-03-10 02:47:41
-88	aut	13	3	1992-12-11 11:22:59
-89	fugiat	14	4	2003-10-10 19:27:57
-90	dignissimos	15	5	1998-11-11 12:59:37
-91	enim	1	1	1986-02-16 11:38:00
-92	quod	2	2	1986-11-18 06:14:56
-93	minus	3	3	2001-12-31 06:19:28
-94	id	4	4	2016-11-02 13:07:27
-95	magnam	5	5	2004-11-18 00:23:09
-96	in	6	1	2018-03-30 08:37:08
-97	quia	7	2	1975-10-26 10:04:16
-98	eum	8	3	1996-02-05 07:56:16
-99	dicta	9	4	1983-11-11 09:40:00
-100	culpa	10	5	1987-07-25 05:10:03
+4	aspernatur	8	1	1979-02-17 15:59:35
+6	repudiandae	12	1	1976-11-17 23:02:38
+7	optio	15	1	1990-12-13 13:40:59
+8	aut	15	1	1971-04-06 22:30:51
+10	possimus	1	1	1981-08-02 01:35:34
+11	consequatur	15	4	2000-11-17 13:05:38
+13	dignissimos	1	3	1972-09-05 17:07:23
+14	cum	6	3	2000-09-21 05:44:06
+15	ratione	14	5	2020-01-27 00:42:45
+16	commodi	6	1	1993-03-15 02:30:59
+21	placeat	10	5	2004-10-28 19:41:21
+24	a	7	1	1998-11-11 15:39:10
+26	qui	12	4	1995-10-22 15:05:33
+27	consequuntur	11	2	2007-10-03 23:03:23
+29	ab	4	5	1984-01-24 14:11:39
+34	asperiores	4	2	1982-02-02 08:06:18
+35	quia	12	3	1971-03-24 10:33:08
+40	velit	9	4	2008-09-22 07:03:06
+41	amet	9	3	2006-12-24 08:41:33
+43	recusandae	12	3	1991-10-14 19:07:48
+44	explicabo	15	4	1995-08-30 07:37:16
+46	odit	7	4	1981-07-08 05:10:02
+47	quae	15	3	2014-11-30 20:19:07
+53	expedita	7	3	1984-06-10 02:33:43
+54	necessitatibus	2	5	2010-09-09 03:39:33
+55	laboriosam	3	2	2011-02-17 00:43:32
+58	inventore	2	5	2006-05-20 17:04:41
+61	laborum	9	4	2019-04-23 02:11:52
+63	quam	8	2	1975-11-04 03:36:19
+64	eveniet	10	1	1992-11-27 06:38:04
+67	culpa	6	1	2009-09-16 17:37:40
+68	error	10	3	2008-02-22 04:04:19
+69	veniam	10	1	1990-03-16 11:22:39
+70	ipsam	6	4	2005-05-06 07:08:13
+71	libero	2	4	1981-03-06 13:45:46
+72	iure	8	4	1993-07-27 07:33:26
+73	at	6	1	2006-11-29 22:25:17
+75	dolores	15	5	1981-01-09 14:01:32
+77	fugiat	15	5	2018-09-07 06:28:48
+78	ullam	2	1	2012-09-18 03:15:29
+79	hic	7	3	2021-12-16 04:04:51
+80	sequi	13	4	1979-11-09 13:36:19
+83	enim	2	4	2021-10-08 23:37:28
+84	eum	8	3	2012-01-28 13:48:04
+86	eaque	7	4	1991-11-30 14:26:26
+90	voluptate	5	1	2015-09-02 15:06:01
+91	molestias	10	1	1980-09-02 04:08:11
+92	quas	10	2	1990-09-21 17:55:52
+93	quidem	6	5	2009-04-11 15:07:35
+94	voluptatum	4	2	2012-10-05 19:35:12
+95	officia	11	5	2017-03-11 05:01:26
+96	tenetur	9	3	1998-07-30 18:50:03
+98	quasi	8	4	1993-12-02 16:26:31
+1	molestiae	10	1	1998-11-06 01:35:14
+2	delectus	5	1	1984-03-28 03:24:41
+3	repellendus	3	1	1997-04-29 17:31:36
+5	perferendis	15	1	1993-12-05 13:50:58
+9	sint	7	1	2005-07-07 21:17:55
+12	iste	9	1	1990-03-27 08:59:22
+17	sit	12	1	2007-03-29 15:54:28
+18	deserunt	7	1	1970-10-07 17:40:28
+19	dolore	4	1	2016-08-05 06:36:48
+20	non	1	1	2010-01-14 00:00:07
+22	odio	13	1	1994-07-04 03:57:54
+23	cupiditate	5	1	1986-06-11 06:52:46
+25	ut	2	1	1993-02-06 03:42:48
+28	animi	4	1	2008-10-04 10:47:29
+30	quis	12	1	2006-12-19 17:31:48
+31	excepturi	7	1	1982-06-11 14:14:40
+32	est	3	1	1976-01-12 09:20:57
+33	iusto	6	1	1981-06-18 23:33:48
+36	soluta	8	1	2011-10-02 07:19:37
+37	accusamus	4	1	1991-08-14 05:51:56
+38	aperiam	2	1	2020-05-29 07:34:00
+39	maxime	1	1	1987-11-30 19:11:40
+42	et	7	1	1991-09-15 08:38:07
+45	quisquam	2	1	1983-04-14 03:10:26
+48	labore	10	1	1986-09-16 19:28:33
+49	eius	4	1	1997-08-19 03:57:30
+50	mollitia	7	1	1993-08-25 11:50:29
+51	rerum	15	1	2012-11-23 10:23:42
+52	voluptatem	14	1	2014-12-10 05:17:02
+56	vero	5	1	2007-07-07 21:40:20
+57	ad	8	1	1973-01-16 05:25:18
+59	reiciendis	11	1	2018-01-12 20:14:52
+60	omnis	6	1	1981-10-13 15:22:20
+62	neque	15	1	2010-11-14 15:32:18
+65	nesciunt	2	1	2001-03-30 12:48:45
+66	harum	15	1	1991-06-15 06:56:50
+74	sed	15	1	1999-07-14 15:48:34
+76	sunt	14	1	2016-12-03 08:00:34
+81	rem	9	1	1993-03-07 08:33:33
+82	repellat	14	1	1970-11-12 19:27:57
+85	laudantium	8	1	1982-04-01 08:54:43
+87	illum	4	1	2019-12-18 14:22:52
+88	deleniti	8	1	2010-07-30 05:08:38
+89	doloremque	2	1	1997-11-24 21:06:11
+97	eos	15	1	1978-07-07 19:17:42
+99	ducimus	4	1	1972-02-12 00:01:23
+100	dolor	13	1	2018-09-16 17:30:03
 \.
 
 
@@ -1449,107 +1559,107 @@ COPY public.products (id, name, brand_name_id, catalog_id, created_at) FROM stdi
 -- Data for Name: projects; Type: TABLE DATA; Schema: public; Owner: gb_user
 --
 
-COPY public.projects (id, name, customer_id, contractor_id, system_ids, comments, started_at, finished_at, main_system_id) FROM stdin;
-1	aliquam	3	20	{1}	Occaecati hic itaque et sapiente. Ut ducimus corporis omnis esse vel sunt. Voluptatem asperiores porro laborum voluptatibus aut consequatur qui.	1978-06-05	1979-06-01	1
-2	consectetur	4	4	{1,12}	Omnis veniam ut odio ut. Autem cum corporis tempora ex ea est qui. Iste et perspiciatis ab voluptas.	2015-07-13	2017-05-19	1
-4	ea	10	11	{1}	Nisi labore ipsa aspernatur consequatur. Aliquid aliquam non ipsum id aut. Dolores sit consequuntur dolore provident illo rerum et dolor. Vel quia occaecati laboriosam est ut repudiandae.	1988-01-24	2006-04-07	1
-5	earum	13	12	{1}	Voluptatem non et nemo eos. Et et sit accusantium cupiditate accusantium eum illo. Sit sequi assumenda quibusdam omnis inventore. Quasi rem eius qui doloremque et nostrum autem doloribus.	1976-10-25	1993-05-25	1
-6	minima	2	8	{1}	Odio debitis rem tempora eaque. Vel dolorum nulla eligendi recusandae quisquam et. Tempora voluptatem qui deleniti. Delectus rerum dolores molestiae consequuntur.	1994-02-21	2013-12-13	1
-11	nulla	11	12	{1}	Quo et occaecati et et quia rerum. Neque pariatur molestiae quo impedit consequuntur sit et qui. Magni adipisci atque assumenda vitae culpa.	1972-12-19	2001-05-19	1
-12	provident	6	12	{1}	Repellendus et aut magni. Dolor repellendus consequatur culpa iusto beatae. Dolor et qui ut a veniam esse. Est similique dolores ea impedit et.	1994-08-12	2004-02-21	1
-13	corporis	25	2	{1}	Ab et in voluptate neque. Molestias necessitatibus adipisci qui in repudiandae voluptatem assumenda.	1980-09-13	2009-11-20	1
-16	quia	9	13	{1,1,3}	Rerum et quod ullam dolor autem. Laboriosam quod odit ut vero. Commodi officiis magni minima.	1972-03-17	1996-02-24	1
-17	voluptate	10	2	{1,12}	Voluptatem ab sit inventore quidem corporis. Voluptatem repellat ullam recusandae sit. Est non voluptatem reprehenderit unde tempore debitis esse.	1971-08-07	2000-01-25	1
-20	rerum	20	19	{1,2}	Labore qui id vero neque. Ut est et consequuntur optio ratione est cupiditate suscipit. Est qui nemo autem consequatur.	1993-10-03	1996-04-01	1
-21	voluptatem	3	13	{1,3}	Suscipit animi consectetur aut. Quidem voluptatibus quis dolore vel ad. Earum et culpa voluptatibus ratione. Consequatur recusandae sed soluta earum sit dolore.	1992-03-03	2008-09-02	1
-7	corrupti	24	17	{1,3}	Voluptas maxime ex dolor asperiores atque. Neque dolor sed eos similique commodi suscipit quo. Totam qui aliquid perspiciatis explicabo eligendi. Et eveniet dolor sequi officia asperiores magni eum.	1998-11-20	2021-12-23	1
-72	aut	13	16	{1}	Molestiae beatae quia rerum ab maxime nihil dolorem. Nam suscipit ut quaerat numquam qui labore ipsa corrupti. Non quis iusto rem quia voluptatum accusamus porro.	2014-06-26	2014-09-14	1
-73	alias	2	10	{1}	Aut dicta aut minima est qui necessitatibus harum in. Mollitia id rem voluptate. Laborum magnam omnis vitae illo et officia est.	1970-06-30	1974-11-13	1
-74	voluptatem	17	15	{1}	Et temporibus tempora dignissimos. Libero repellat ad maiores totam rerum quasi rerum. Distinctio aspernatur non explicabo quo doloribus. Quam officia ex officiis hic expedita.	1977-04-21	1978-08-19	1
-76	vel	25	12	{1}	A error id ut dolores sit. Voluptatem harum et natus et et quis.	1993-06-24	1997-01-17	1
-78	illo	2	14	{1}	Eos voluptatem beatae corrupti rem quae. Nesciunt quaerat aut consequuntur est quis qui pariatur. Et eum repudiandae expedita nostrum. Dolores dolores iure maiores necessitatibus ipsa aut.	1973-02-22	1992-01-23	1
-79	nemo	20	13	{1}	Pariatur non et eos facilis. Deleniti facilis architecto quod et repellat.	2000-01-21	2020-05-09	1
-80	culpa	17	20	{1}	Sequi animi qui natus ratione ut impedit. Qui sed rerum eum ut vel consequatur. Reiciendis ratione repellat consequatur quam ut expedita.	2001-09-18	2021-04-27	1
-87	quae	14	10	{1}	Consequatur eum odit magnam quia sit tempore enim. Tenetur ea reiciendis fuga nisi.	1985-03-26	2020-01-03	1
-89	eum	10	20	{1}	Laborum nobis unde numquam officiis. Voluptatum quisquam iure qui dolore sed. Quibusdam doloribus molestiae ratione rerum enim.	1989-12-14	2017-06-29	1
-90	dolor	7	1	{1}	Quia ut reiciendis vel et provident mollitia. Eligendi aut est sint quia qui itaque. Nisi nihil consequatur et totam ad.	1997-09-19	2001-11-19	1
-94	voluptatem	2	1	{1}	Dolor et maiores non rem illum. Nemo architecto placeat et voluptatem nostrum hic et. Sint ipsa ex omnis accusantium.	1975-02-25	1977-04-01	1
-8	est	6	4	{1}	Molestiae sit eaque voluptatem magni ut facilis. Eaque quia molestiae quam alias in. Dolorum eveniet alias ducimus quis. Quia voluptatem enim et nihil incidunt ipsa voluptatem.	1991-11-18	2021-12-23	1
-9	qui	20	4	{1,2}	Sint excepturi porro officiis debitis rerum. Quod optio illo eos sint. Nesciunt et esse dolores aliquid voluptatem aut nulla. Et ea qui explicabo dolorum voluptates.	2001-04-02	2021-12-23	1
-19	eum	15	5	{1}	Tempora ea voluptatum omnis. Praesentium et maiores officiis omnis. Sed est iste non explicabo quasi iste saepe.	2001-02-15	2021-12-23	1
-22	error	9	10	{1}	Minima eum aut ducimus expedita deleniti id voluptatum. Ut quidem a eum quasi amet ab. Non quia ea consequuntur laudantium ratione libero.	1976-07-25	2021-12-23	1
-32	ea	16	6	{1,2}	Omnis optio aut aperiam laboriosam voluptatem eos. Et quas inventore corporis.	2020-01-02	2021-12-23	1
-34	molestiae	15	11	{1,88}	Sed a sed et ducimus. Fugiat quia totam numquam. Sed impedit est velit in consequatur itaque. Qui reiciendis et quia facere accusantium ut quia.	2004-09-13	2021-12-23	1
-61	corrupti	7	11	{1,9,2,3}	Et non quia sed est beatae. Provident et adipisci quis. Doloribus beatae qui est asperiores. Vel dignissimos et corporis sit vel.	2005-09-29	2021-12-23	1
-36	aut	7	2	{1,55}	Dicta autem non impedit voluptates voluptas sed. Vero corporis mollitia beatae adipisci excepturi.	2010-12-22	2021-12-23	1
-39	doloremque	6	16	{1,13,18}	Enim et illum numquam consectetur vero pariatur fugiat. Omnis itaque aliquam quia culpa fugiat. Repudiandae mollitia eos perspiciatis tempora quibusdam ut.	2013-04-29	2021-12-23	1
-41	quo	4	14	{1}	Optio est sit eum non velit pariatur delectus. Error error provident velit eaque illum est pariatur itaque. Dicta nulla vel aspernatur quas.	2001-12-02	2021-12-23	1
-42	et	25	6	{1}	Possimus est dolores odit debitis soluta et nulla quam. Neque voluptas est molestiae iure nam. Omnis placeat et cumque illum deserunt.	2015-11-25	2021-12-23	1
-43	optio	23	5	{1,66}	Eos in perspiciatis sed sint. Ea ut dolorem dolores quae reprehenderit qui provident. Et similique vel qui blanditiis laudantium et corporis.	2001-03-14	2021-12-23	1
-44	voluptatem	20	14	{1}	Recusandae consequuntur qui voluptas similique. Aut placeat corrupti iusto est sint minus. Laudantium temporibus voluptatem mollitia ipsum eius. Nostrum fugit numquam autem aut.	2001-06-09	2021-12-23	1
-62	dolor	6	17	{1}	Aliquam itaque tempora sunt. Consequatur qui qui minima consectetur facere omnis rerum. Consequatur recusandae sunt occaecati laudantium.	1991-11-30	2021-12-23	1
-63	facilis	12	5	{1}	Quisquam rem assumenda dolores voluptatem qui dolores. Quos quo sunt nisi voluptatem eum nam omnis. Molestiae animi repellat occaecati hic sunt.	2018-11-12	2021-12-23	1
-64	optio	20	11	{1}	Nam distinctio sed explicabo. Ut nostrum dicta quia doloribus ut doloribus distinctio impedit.	1998-08-16	2021-12-23	1
-65	totam	19	18	{1,6}	Exercitationem sunt sed earum rerum asperiores doloribus. Rerum quia et labore quam saepe. Laboriosam quasi corporis omnis. Voluptatem dolores quia debitis est quia dicta consequatur.	2001-02-28	2021-12-23	1
-81	quia	15	6	{1}	Ea nisi quos voluptas labore dolor praesentium. Eveniet quaerat totam distinctio excepturi et eos ab vel. Ut laborum debitis minus.	1977-07-28	2021-12-23	1
-88	commodi	16	3	{1}	Soluta repudiandae necessitatibus velit repellendus eos deserunt. Ducimus sit sit magni quos blanditiis. Non rerum sed est laboriosam qui.	2001-09-02	2021-12-23	1
-91	nisi	6	11	{1}	Voluptas vel sunt aperiam. Maiores molestiae iste voluptatem placeat reprehenderit. Ab illo natus aut facilis.	1997-03-03	2021-12-23	1
-93	est	3	3	{1}	Dolores molestiae deleniti et ipsum. Enim sed nesciunt fugiat. Et omnis rem incidunt consequatur. Fuga odit aut et quo.	2011-12-05	2021-12-23	1
-23	est	4	3	{1}	Natus aut voluptatem minima vero rerum qui at. Laboriosam provident libero blanditiis tenetur et. Quod tenetur veniam eius unde delectus et est. Earum dolorum alias mollitia facere doloribus id.	1999-01-31	2011-08-09	1
-25	et	20	3	{1}	Quos reiciendis sunt sequi iure impedit. Asperiores culpa molestiae molestias ut voluptatibus a. Voluptatem molestiae est quo. Voluptates aspernatur assumenda ut animi optio esse.	1975-12-12	2003-10-24	1
-28	nobis	3	8	{1}	Officia nam sunt aliquam dolor id. Sit nesciunt rerum sit et ut pariatur.	1984-02-03	1998-07-01	1
-33	veritatis	16	5	{1,30}	In aut eos est cum voluptate. Quibusdam quasi expedita ut sapiente qui et beatae autem. Modi repellat debitis sed sit ab velit.	1975-10-21	1998-11-22	1
-49	voluptate	21	1	{1}	Doloremque voluptas molestiae et incidunt modi deleniti. Voluptatem sint et rerum. Explicabo doloremque corrupti natus velit non odit dolore.	1986-02-26	2012-03-04	1
-52	non	16	13	{1,99}	Voluptatum velit beatae dolores est. Et aut dolorem fugit repellendus perferendis commodi quis. Et quo voluptas quaerat vero consequatur animi dignissimos.	1975-06-11	2002-06-14	1
-54	at	16	2	{1,7}	Cum facilis quia et saepe sapiente. Ipsa tenetur quam voluptatem alias veritatis ad harum. Dolorem illum consequatur dolorem dolore quas aspernatur rerum. Velit aliquid sunt voluptatem ut eum.	1994-06-13	2008-05-30	1
-55	amet	14	2	{1}	Dicta officiis perferendis ex aut distinctio. Aut facilis qui nobis provident. Repellendus commodi quo incidunt provident ea architecto fugit. Accusamus ex consequuntur aut id.	1972-07-15	2016-11-10	1
-57	porro	25	9	{1,9}	Est nisi ratione atque ipsum esse dolores reprehenderit dolores. Voluptatem optio esse qui in. Ipsa est dolores similique veniam quisquam nam ut.	2014-04-07	2020-10-25	1
-71	quos	14	2	{1}	Et velit voluptatem iusto quod dolor ad. Voluptas mollitia omnis est debitis quod et.	1983-01-31	2017-03-04	1
-92	quis	17	5	{1}	Sapiente dolores voluptatum iure beatae corporis mollitia voluptatem. Expedita quos vitae nam inventore eum architecto aliquam. Voluptatem molestias explicabo ut ab explicabo quos.	1994-05-27	2021-12-23	1
-35	inventore	17	18	{2,4}	Quibusdam est minus et. Dolorem iste aliquid qui consectetur voluptas aut. Repellendus aliquid porro sunt non tempore modi voluptatem.	1977-10-02	2010-08-11	2
-37	est	23	2	{5}	Rem nobis ipsum et ducimus. Accusamus voluptate debitis officia nostrum possimus velit. Blanditiis delectus soluta rerum atque. Nobis ex odio ut.	1970-05-06	1971-07-04	5
-40	non	14	9	{7,77}	Ea fugit beatae a cupiditate quasi. Voluptas vel dicta ipsam in in velit. Maiores illo quasi voluptatibus est.	2000-02-19	2012-06-03	7
-45	occaecati	7	12	{7}	Facilis labore reprehenderit ut vel distinctio saepe. Ab deserunt cupiditate et repellat. Veniam aut tempora aspernatur voluptas. Iste sed excepturi rem voluptas. Et vero culpa esse.	1992-10-10	1993-02-02	7
-46	necessitatibus	20	19	{8,23,33}	Magnam rerum quia tenetur rerum quis rerum. Eveniet quis dolorum asperiores quidem dolorem. Et quis voluptatem dolor voluptatibus expedita exercitationem odit non.	1996-05-24	2000-04-22	8
-47	necessitatibus	9	19	{56}	Quis enim repellat porro eos et modi molestiae. Qui enim excepturi pariatur sunt perferendis. Amet quia nobis ex ut.	1986-05-25	2006-12-06	56
-48	accusamus	8	7	{77,1}	Quia est laudantium corrupti accusamus. Iusto sunt velit beatae tenetur. Ex libero vel voluptas.	1985-11-12	2004-04-09	77
-60	est	9	20	{5,43}	Facere sit expedita voluptates omnis. A sit blanditiis sint a ut a. Impedit et a id voluptatem nihil. Ut ab totam vel.	1982-02-04	2020-12-26	5
-66	explicabo	7	2	{6}	Nostrum odit aliquid vitae incidunt molestias et. Quisquam minus necessitatibus consequuntur placeat. Aut veniam sapiente alias beatae vel et dolor.	2003-02-14	2017-10-17	6
-67	praesentium	17	5	{3}	Aut earum veniam ut eaque doloribus laudantium. Distinctio esse est beatae et cupiditate rerum fugiat. Doloribus veritatis facilis numquam autem corporis.	1996-03-04	1997-01-17	3
-68	ut	6	12	{9,87,77,90,93}	Odit nulla velit et aut quia illo ratione. Distinctio aperiam aut dolorum sint suscipit. Aut reiciendis dolor nihil voluptatem soluta.	1970-06-14	1991-05-11	9
-38	quia	4	1	{12,22}	Magnam sed et voluptatibus dolor est. Similique hic aut aperiam quia.	2001-03-27	2021-12-23	12
-69	et	1	18	{11}	Deserunt quos cum provident sunt. Praesentium voluptate dolorem provident ea rerum repellat aut. Similique qui aperiam voluptas neque labore. In autem rerum provident provident consequatur et.	1986-10-30	2021-12-12	11
-82	delectus	12	15	{17}	Facilis eum id possimus ratione harum saepe quisquam porro. Hic non fugiat omnis est voluptate quam. Nihil deserunt in quia soluta vero soluta quia. Nisi labore qui aut aperiam ratione ducimus enim.	1999-12-29	2002-11-27	17
-83	est	11	10	{18}	Sit dignissimos culpa nobis molestias quae. Rerum natus a nihil quia amet harum sed.	2002-01-13	2018-11-05	18
-85	iste	13	5	{19,89}	Ut cum exercitationem quos nobis odit beatae. Eos aut dolorem aut fuga consequuntur ipsam labore. Cumque enim accusantium mollitia laborum sint quia harum.	1999-01-09	2016-12-01	19
-96	qui	9	9	{66}	Fugit dolor natus quo ipsum facilis. Debitis qui voluptas rerum aut. Et cupiditate qui vitae omnis veritatis.\\nConsequuntur adipisci nobis quam. Et error illo reprehenderit.	1994-02-28	1999-12-14	66
-97	ut	12	19	{77}	Quis odio odio magnam pariatur. Ipsam in voluptatibus id. Neque corporis voluptas rerum aspernatur sit beatae neque. Tempore tenetur sint beatae illum. Est est iusto assumenda non fugiat.	2012-03-26	2017-07-25	77
-99	excepturi	12	1	{44}	Cumque temporibus laudantium nulla. Sed quaerat omnis ipsam. Sit veritatis in pariatur iste iusto sed. Omnis aut hic perspiciatis dolorem nesciunt.	1980-05-07	2017-08-26	44
-3	quidem	4	2	{22}	Quia nemo et officia aut. Sed quasi mollitia totam ullam quis. Non rem voluptatibus nostrum architecto. Nam ut nihil error magnam harum.	2000-12-06	2021-12-23	22
-10	sint	13	18	{44}	Sint eum voluptates quae consequatur facere commodi. Ad maiores optio maiores doloremque non incidunt. Sed quia aliquid amet accusamus laborum itaque. Nobis sapiente dicta explicabo nulla illo odit.	1995-03-12	2021-12-23	44
-14	id	14	17	{21}	Quis ut corporis in provident magni. Praesentium sequi quis aut nostrum. Impedit et numquam sint vitae similique rem possimus. Debitis doloribus vero sed modi minus quisquam.	2003-06-10	2021-12-23	21
-15	dolor	8	9	{54}	Ut rerum inventore expedita aliquam nulla. Ab tempore ut impedit magni. Ut molestiae magni expedita doloribus eos ut sed impedit.	1984-05-14	2021-12-23	54
-18	et	14	17	{65}	Laudantium in recusandae recusandae quia voluptatem totam voluptas. Quam id aut nulla.	1974-11-14	2021-12-23	65
-24	delectus	10	15	{87}	Quo quis sequi rerum voluptatem. Perspiciatis sit nulla sit ut similique error. Eaque expedita odit assumenda quasi.	2018-12-07	2021-12-23	87
-26	distinctio	24	16	{88,1}	At rerum consequatur aspernatur et rerum ad et. Quaerat laudantium dolores alias vel. Non cumque quibusdam et voluptatibus rerum nihil.	1999-08-15	2021-12-23	88
-27	consequuntur	10	18	{90,1}	Esse dolores quia soluta praesentium sed officia. Aliquid illo quis dolores est illum. Quia id consequatur sunt est enim. Et non et aut sit eligendi.	2002-05-01	2021-12-23	90
-29	repellat	14	2	{100}	Mollitia suscipit odit tenetur dolorum inventore unde sit molestiae. Eius voluptas cumque soluta quia aut iste eius suscipit. Dolores hic est expedita sint distinctio.	2020-11-22	2021-12-23	100
-30	omnis	22	8	{12,9}	Impedit consequatur quia quo. Dicta non nihil sint occaecati occaecati illum eaque eligendi. Est sed dolorem quae accusantium et rem. Non nulla hic ipsum qui blanditiis id.	2019-07-24	2021-12-23	12
-31	atque	2	18	{33,15}	Cupiditate sequi totam facilis incidunt quia. Quasi aut repudiandae est voluptatum esse dolorem voluptates. Rem et necessitatibus nobis iste iure nemo.	2017-05-03	2021-12-23	33
-50	dolores	3	11	{34,8}	Sit in quia itaque et harum sed eos. Aspernatur est inventore sit. Voluptatem reprehenderit libero sunt illo ab ea qui. Ea atque et omnis amet.	1989-05-04	2021-12-23	34
-51	consequatur	7	7	{45}	Occaecati eos sunt iure et repellendus qui. Omnis eius eligendi beatae quo molestiae. Sunt sit velit quibusdam facere voluptatem nesciunt est.	2002-03-14	2021-12-23	45
-53	laborum	16	19	{55}	Sunt dignissimos impedit dolorum provident aspernatur rerum quas. Quidem harum expedita excepturi rerum culpa quo. Molestias soluta ipsa consequatur eius. Illum dolore qui voluptas explicabo autem.	2007-01-20	2021-12-23	55
-56	dignissimos	17	13	{45}	Quo quo odit beatae. Autem aut tempore quibusdam eos maxime ut. Eveniet expedita aut maxime officia enim alias. Dolorem et reprehenderit facere nihil.	2019-02-03	2021-12-23	45
-58	suscipit	13	20	{65}	Eos sunt aut molestiae ut velit est. Nihil voluptatem ut labore accusantium at est. Qui aut et non molestias qui sapiente quia.	2002-07-04	2021-12-23	65
-59	aliquid	7	9	{77,19}	Cum dolorem dignissimos quibusdam amet explicabo repellat. Ut distinctio atque ipsum cumque facilis ipsam. Vel vero totam et qui.	1984-11-06	2021-12-23	77
-70	perferendis	25	6	{77}	Et omnis odit ex sint est qui est ullam. Et praesentium ducimus laudantium vitae eius deleniti saepe quia. Aut omnis accusamus ut qui quaerat. Non commodi fugit sint quia ut.	1998-07-14	2021-12-23	77
-75	doloremque	16	2	{66}	Quia nisi saepe ipsa eos. Et vel sed aut quia reiciendis facilis. Magnam voluptatem autem et eligendi.	1994-12-24	2021-12-23	66
-77	doloribus	8	2	{32}	Adipisci distinctio consequuntur dolores nulla. Quia architecto est totam id dolor. Ut placeat illo nesciunt suscipit dolores ut aperiam. Deleniti voluptatem consequatur iure quibusdam.	1975-04-27	2021-12-23	32
-84	quas	19	14	{21}	Magnam dolorum nisi fuga in voluptatem animi. Quos fugiat sint at consequuntur. Eum non voluptatum at suscipit.\\nAspernatur sed incidunt similique esse eaque. Rerum laudantium esse animi iste.	2003-05-02	2021-12-23	21
-86	nulla	7	13	{39}	Labore et quisquam animi necessitatibus hic voluptatum. Qui sunt ea ut atque et exercitationem vel. Placeat ducimus consequatur in fuga. Eos aut et iure ea illum sed alias nulla.	2009-01-30	2021-12-23	39
-95	dolor	20	20	{97}	Voluptatem adipisci ex quibusdam cupiditate tenetur. Perferendis dolores doloremque placeat quos quis optio tempore. Qui sunt veritatis delectus ullam aut dignissimos dolorum deleniti.	1987-10-28	2021-12-23	97
-98	veritatis	13	13	{96,2,3}	Et optio modi velit qui sed ea. Voluptatem qui iure reiciendis. Aut quos voluptas quaerat rerum.	1993-03-11	2021-12-23	96
-100	enim	4	4	{90,13,14,15}	Beatae a fuga iste ut quas. Mollitia eum totam et. Veniam recusandae voluptas sint nulla.	2007-07-26	2021-12-23	90
+COPY public.projects (id, name, customer_id, contractor_id, comments, started_at, finished_at) FROM stdin;
+1	aliquam	3	20	Occaecati hic itaque et sapiente. Ut ducimus corporis omnis esse vel sunt. Voluptatem asperiores porro laborum voluptatibus aut consequatur qui.	1978-06-05	1979-06-01
+2	consectetur	4	4	Omnis veniam ut odio ut. Autem cum corporis tempora ex ea est qui. Iste et perspiciatis ab voluptas.	2015-07-13	2017-05-19
+4	ea	10	11	Nisi labore ipsa aspernatur consequatur. Aliquid aliquam non ipsum id aut. Dolores sit consequuntur dolore provident illo rerum et dolor. Vel quia occaecati laboriosam est ut repudiandae.	1988-01-24	2006-04-07
+5	earum	13	12	Voluptatem non et nemo eos. Et et sit accusantium cupiditate accusantium eum illo. Sit sequi assumenda quibusdam omnis inventore. Quasi rem eius qui doloremque et nostrum autem doloribus.	1976-10-25	1993-05-25
+6	minima	2	8	Odio debitis rem tempora eaque. Vel dolorum nulla eligendi recusandae quisquam et. Tempora voluptatem qui deleniti. Delectus rerum dolores molestiae consequuntur.	1994-02-21	2013-12-13
+11	nulla	11	12	Quo et occaecati et et quia rerum. Neque pariatur molestiae quo impedit consequuntur sit et qui. Magni adipisci atque assumenda vitae culpa.	1972-12-19	2001-05-19
+12	provident	6	12	Repellendus et aut magni. Dolor repellendus consequatur culpa iusto beatae. Dolor et qui ut a veniam esse. Est similique dolores ea impedit et.	1994-08-12	2004-02-21
+13	corporis	25	2	Ab et in voluptate neque. Molestias necessitatibus adipisci qui in repudiandae voluptatem assumenda.	1980-09-13	2009-11-20
+16	quia	9	13	Rerum et quod ullam dolor autem. Laboriosam quod odit ut vero. Commodi officiis magni minima.	1972-03-17	1996-02-24
+17	voluptate	10	2	Voluptatem ab sit inventore quidem corporis. Voluptatem repellat ullam recusandae sit. Est non voluptatem reprehenderit unde tempore debitis esse.	1971-08-07	2000-01-25
+20	rerum	20	19	Labore qui id vero neque. Ut est et consequuntur optio ratione est cupiditate suscipit. Est qui nemo autem consequatur.	1993-10-03	1996-04-01
+21	voluptatem	3	13	Suscipit animi consectetur aut. Quidem voluptatibus quis dolore vel ad. Earum et culpa voluptatibus ratione. Consequatur recusandae sed soluta earum sit dolore.	1992-03-03	2008-09-02
+7	corrupti	24	17	Voluptas maxime ex dolor asperiores atque. Neque dolor sed eos similique commodi suscipit quo. Totam qui aliquid perspiciatis explicabo eligendi. Et eveniet dolor sequi officia asperiores magni eum.	1998-11-20	2021-12-23
+72	aut	13	16	Molestiae beatae quia rerum ab maxime nihil dolorem. Nam suscipit ut quaerat numquam qui labore ipsa corrupti. Non quis iusto rem quia voluptatum accusamus porro.	2014-06-26	2014-09-14
+73	alias	2	10	Aut dicta aut minima est qui necessitatibus harum in. Mollitia id rem voluptate. Laborum magnam omnis vitae illo et officia est.	1970-06-30	1974-11-13
+74	voluptatem	17	15	Et temporibus tempora dignissimos. Libero repellat ad maiores totam rerum quasi rerum. Distinctio aspernatur non explicabo quo doloribus. Quam officia ex officiis hic expedita.	1977-04-21	1978-08-19
+76	vel	25	12	A error id ut dolores sit. Voluptatem harum et natus et et quis.	1993-06-24	1997-01-17
+78	illo	2	14	Eos voluptatem beatae corrupti rem quae. Nesciunt quaerat aut consequuntur est quis qui pariatur. Et eum repudiandae expedita nostrum. Dolores dolores iure maiores necessitatibus ipsa aut.	1973-02-22	1992-01-23
+79	nemo	20	13	Pariatur non et eos facilis. Deleniti facilis architecto quod et repellat.	2000-01-21	2020-05-09
+80	culpa	17	20	Sequi animi qui natus ratione ut impedit. Qui sed rerum eum ut vel consequatur. Reiciendis ratione repellat consequatur quam ut expedita.	2001-09-18	2021-04-27
+87	quae	14	10	Consequatur eum odit magnam quia sit tempore enim. Tenetur ea reiciendis fuga nisi.	1985-03-26	2020-01-03
+89	eum	10	20	Laborum nobis unde numquam officiis. Voluptatum quisquam iure qui dolore sed. Quibusdam doloribus molestiae ratione rerum enim.	1989-12-14	2017-06-29
+90	dolor	7	1	Quia ut reiciendis vel et provident mollitia. Eligendi aut est sint quia qui itaque. Nisi nihil consequatur et totam ad.	1997-09-19	2001-11-19
+94	voluptatem	2	1	Dolor et maiores non rem illum. Nemo architecto placeat et voluptatem nostrum hic et. Sint ipsa ex omnis accusantium.	1975-02-25	1977-04-01
+8	est	6	4	Molestiae sit eaque voluptatem magni ut facilis. Eaque quia molestiae quam alias in. Dolorum eveniet alias ducimus quis. Quia voluptatem enim et nihil incidunt ipsa voluptatem.	1991-11-18	2021-12-23
+9	qui	20	4	Sint excepturi porro officiis debitis rerum. Quod optio illo eos sint. Nesciunt et esse dolores aliquid voluptatem aut nulla. Et ea qui explicabo dolorum voluptates.	2001-04-02	2021-12-23
+19	eum	15	5	Tempora ea voluptatum omnis. Praesentium et maiores officiis omnis. Sed est iste non explicabo quasi iste saepe.	2001-02-15	2021-12-23
+22	error	9	10	Minima eum aut ducimus expedita deleniti id voluptatum. Ut quidem a eum quasi amet ab. Non quia ea consequuntur laudantium ratione libero.	1976-07-25	2021-12-23
+32	ea	16	6	Omnis optio aut aperiam laboriosam voluptatem eos. Et quas inventore corporis.	2020-01-02	2021-12-23
+34	molestiae	15	11	Sed a sed et ducimus. Fugiat quia totam numquam. Sed impedit est velit in consequatur itaque. Qui reiciendis et quia facere accusantium ut quia.	2004-09-13	2021-12-23
+61	corrupti	7	11	Et non quia sed est beatae. Provident et adipisci quis. Doloribus beatae qui est asperiores. Vel dignissimos et corporis sit vel.	2005-09-29	2021-12-23
+36	aut	7	2	Dicta autem non impedit voluptates voluptas sed. Vero corporis mollitia beatae adipisci excepturi.	2010-12-22	2021-12-23
+39	doloremque	6	16	Enim et illum numquam consectetur vero pariatur fugiat. Omnis itaque aliquam quia culpa fugiat. Repudiandae mollitia eos perspiciatis tempora quibusdam ut.	2013-04-29	2021-12-23
+41	quo	4	14	Optio est sit eum non velit pariatur delectus. Error error provident velit eaque illum est pariatur itaque. Dicta nulla vel aspernatur quas.	2001-12-02	2021-12-23
+42	et	25	6	Possimus est dolores odit debitis soluta et nulla quam. Neque voluptas est molestiae iure nam. Omnis placeat et cumque illum deserunt.	2015-11-25	2021-12-23
+43	optio	23	5	Eos in perspiciatis sed sint. Ea ut dolorem dolores quae reprehenderit qui provident. Et similique vel qui blanditiis laudantium et corporis.	2001-03-14	2021-12-23
+44	voluptatem	20	14	Recusandae consequuntur qui voluptas similique. Aut placeat corrupti iusto est sint minus. Laudantium temporibus voluptatem mollitia ipsum eius. Nostrum fugit numquam autem aut.	2001-06-09	2021-12-23
+62	dolor	6	17	Aliquam itaque tempora sunt. Consequatur qui qui minima consectetur facere omnis rerum. Consequatur recusandae sunt occaecati laudantium.	1991-11-30	2021-12-23
+63	facilis	12	5	Quisquam rem assumenda dolores voluptatem qui dolores. Quos quo sunt nisi voluptatem eum nam omnis. Molestiae animi repellat occaecati hic sunt.	2018-11-12	2021-12-23
+64	optio	20	11	Nam distinctio sed explicabo. Ut nostrum dicta quia doloribus ut doloribus distinctio impedit.	1998-08-16	2021-12-23
+65	totam	19	18	Exercitationem sunt sed earum rerum asperiores doloribus. Rerum quia et labore quam saepe. Laboriosam quasi corporis omnis. Voluptatem dolores quia debitis est quia dicta consequatur.	2001-02-28	2021-12-23
+81	quia	15	6	Ea nisi quos voluptas labore dolor praesentium. Eveniet quaerat totam distinctio excepturi et eos ab vel. Ut laborum debitis minus.	1977-07-28	2021-12-23
+88	commodi	16	3	Soluta repudiandae necessitatibus velit repellendus eos deserunt. Ducimus sit sit magni quos blanditiis. Non rerum sed est laboriosam qui.	2001-09-02	2021-12-23
+91	nisi	6	11	Voluptas vel sunt aperiam. Maiores molestiae iste voluptatem placeat reprehenderit. Ab illo natus aut facilis.	1997-03-03	2021-12-23
+93	est	3	3	Dolores molestiae deleniti et ipsum. Enim sed nesciunt fugiat. Et omnis rem incidunt consequatur. Fuga odit aut et quo.	2011-12-05	2021-12-23
+23	est	4	3	Natus aut voluptatem minima vero rerum qui at. Laboriosam provident libero blanditiis tenetur et. Quod tenetur veniam eius unde delectus et est. Earum dolorum alias mollitia facere doloribus id.	1999-01-31	2011-08-09
+25	et	20	3	Quos reiciendis sunt sequi iure impedit. Asperiores culpa molestiae molestias ut voluptatibus a. Voluptatem molestiae est quo. Voluptates aspernatur assumenda ut animi optio esse.	1975-12-12	2003-10-24
+28	nobis	3	8	Officia nam sunt aliquam dolor id. Sit nesciunt rerum sit et ut pariatur.	1984-02-03	1998-07-01
+33	veritatis	16	5	In aut eos est cum voluptate. Quibusdam quasi expedita ut sapiente qui et beatae autem. Modi repellat debitis sed sit ab velit.	1975-10-21	1998-11-22
+49	voluptate	21	1	Doloremque voluptas molestiae et incidunt modi deleniti. Voluptatem sint et rerum. Explicabo doloremque corrupti natus velit non odit dolore.	1986-02-26	2012-03-04
+52	non	16	13	Voluptatum velit beatae dolores est. Et aut dolorem fugit repellendus perferendis commodi quis. Et quo voluptas quaerat vero consequatur animi dignissimos.	1975-06-11	2002-06-14
+54	at	16	2	Cum facilis quia et saepe sapiente. Ipsa tenetur quam voluptatem alias veritatis ad harum. Dolorem illum consequatur dolorem dolore quas aspernatur rerum. Velit aliquid sunt voluptatem ut eum.	1994-06-13	2008-05-30
+55	amet	14	2	Dicta officiis perferendis ex aut distinctio. Aut facilis qui nobis provident. Repellendus commodi quo incidunt provident ea architecto fugit. Accusamus ex consequuntur aut id.	1972-07-15	2016-11-10
+57	porro	25	9	Est nisi ratione atque ipsum esse dolores reprehenderit dolores. Voluptatem optio esse qui in. Ipsa est dolores similique veniam quisquam nam ut.	2014-04-07	2020-10-25
+71	quos	14	2	Et velit voluptatem iusto quod dolor ad. Voluptas mollitia omnis est debitis quod et.	1983-01-31	2017-03-04
+92	quis	17	5	Sapiente dolores voluptatum iure beatae corporis mollitia voluptatem. Expedita quos vitae nam inventore eum architecto aliquam. Voluptatem molestias explicabo ut ab explicabo quos.	1994-05-27	2021-12-23
+35	inventore	17	18	Quibusdam est minus et. Dolorem iste aliquid qui consectetur voluptas aut. Repellendus aliquid porro sunt non tempore modi voluptatem.	1977-10-02	2010-08-11
+37	est	23	2	Rem nobis ipsum et ducimus. Accusamus voluptate debitis officia nostrum possimus velit. Blanditiis delectus soluta rerum atque. Nobis ex odio ut.	1970-05-06	1971-07-04
+40	non	14	9	Ea fugit beatae a cupiditate quasi. Voluptas vel dicta ipsam in in velit. Maiores illo quasi voluptatibus est.	2000-02-19	2012-06-03
+45	occaecati	7	12	Facilis labore reprehenderit ut vel distinctio saepe. Ab deserunt cupiditate et repellat. Veniam aut tempora aspernatur voluptas. Iste sed excepturi rem voluptas. Et vero culpa esse.	1992-10-10	1993-02-02
+46	necessitatibus	20	19	Magnam rerum quia tenetur rerum quis rerum. Eveniet quis dolorum asperiores quidem dolorem. Et quis voluptatem dolor voluptatibus expedita exercitationem odit non.	1996-05-24	2000-04-22
+47	necessitatibus	9	19	Quis enim repellat porro eos et modi molestiae. Qui enim excepturi pariatur sunt perferendis. Amet quia nobis ex ut.	1986-05-25	2006-12-06
+48	accusamus	8	7	Quia est laudantium corrupti accusamus. Iusto sunt velit beatae tenetur. Ex libero vel voluptas.	1985-11-12	2004-04-09
+60	est	9	20	Facere sit expedita voluptates omnis. A sit blanditiis sint a ut a. Impedit et a id voluptatem nihil. Ut ab totam vel.	1982-02-04	2020-12-26
+66	explicabo	7	2	Nostrum odit aliquid vitae incidunt molestias et. Quisquam minus necessitatibus consequuntur placeat. Aut veniam sapiente alias beatae vel et dolor.	2003-02-14	2017-10-17
+67	praesentium	17	5	Aut earum veniam ut eaque doloribus laudantium. Distinctio esse est beatae et cupiditate rerum fugiat. Doloribus veritatis facilis numquam autem corporis.	1996-03-04	1997-01-17
+68	ut	6	12	Odit nulla velit et aut quia illo ratione. Distinctio aperiam aut dolorum sint suscipit. Aut reiciendis dolor nihil voluptatem soluta.	1970-06-14	1991-05-11
+38	quia	4	1	Magnam sed et voluptatibus dolor est. Similique hic aut aperiam quia.	2001-03-27	2021-12-23
+69	et	1	18	Deserunt quos cum provident sunt. Praesentium voluptate dolorem provident ea rerum repellat aut. Similique qui aperiam voluptas neque labore. In autem rerum provident provident consequatur et.	1986-10-30	2021-12-12
+82	delectus	12	15	Facilis eum id possimus ratione harum saepe quisquam porro. Hic non fugiat omnis est voluptate quam. Nihil deserunt in quia soluta vero soluta quia. Nisi labore qui aut aperiam ratione ducimus enim.	1999-12-29	2002-11-27
+83	est	11	10	Sit dignissimos culpa nobis molestias quae. Rerum natus a nihil quia amet harum sed.	2002-01-13	2018-11-05
+85	iste	13	5	Ut cum exercitationem quos nobis odit beatae. Eos aut dolorem aut fuga consequuntur ipsam labore. Cumque enim accusantium mollitia laborum sint quia harum.	1999-01-09	2016-12-01
+96	qui	9	9	Fugit dolor natus quo ipsum facilis. Debitis qui voluptas rerum aut. Et cupiditate qui vitae omnis veritatis.\\nConsequuntur adipisci nobis quam. Et error illo reprehenderit.	1994-02-28	1999-12-14
+97	ut	12	19	Quis odio odio magnam pariatur. Ipsam in voluptatibus id. Neque corporis voluptas rerum aspernatur sit beatae neque. Tempore tenetur sint beatae illum. Est est iusto assumenda non fugiat.	2012-03-26	2017-07-25
+99	excepturi	12	1	Cumque temporibus laudantium nulla. Sed quaerat omnis ipsam. Sit veritatis in pariatur iste iusto sed. Omnis aut hic perspiciatis dolorem nesciunt.	1980-05-07	2017-08-26
+3	quidem	4	2	Quia nemo et officia aut. Sed quasi mollitia totam ullam quis. Non rem voluptatibus nostrum architecto. Nam ut nihil error magnam harum.	2000-12-06	2021-12-23
+10	sint	13	18	Sint eum voluptates quae consequatur facere commodi. Ad maiores optio maiores doloremque non incidunt. Sed quia aliquid amet accusamus laborum itaque. Nobis sapiente dicta explicabo nulla illo odit.	1995-03-12	2021-12-23
+14	id	14	17	Quis ut corporis in provident magni. Praesentium sequi quis aut nostrum. Impedit et numquam sint vitae similique rem possimus. Debitis doloribus vero sed modi minus quisquam.	2003-06-10	2021-12-23
+15	dolor	8	9	Ut rerum inventore expedita aliquam nulla. Ab tempore ut impedit magni. Ut molestiae magni expedita doloribus eos ut sed impedit.	1984-05-14	2021-12-23
+18	et	14	17	Laudantium in recusandae recusandae quia voluptatem totam voluptas. Quam id aut nulla.	1974-11-14	2021-12-23
+24	delectus	10	15	Quo quis sequi rerum voluptatem. Perspiciatis sit nulla sit ut similique error. Eaque expedita odit assumenda quasi.	2018-12-07	2021-12-23
+26	distinctio	24	16	At rerum consequatur aspernatur et rerum ad et. Quaerat laudantium dolores alias vel. Non cumque quibusdam et voluptatibus rerum nihil.	1999-08-15	2021-12-23
+27	consequuntur	10	18	Esse dolores quia soluta praesentium sed officia. Aliquid illo quis dolores est illum. Quia id consequatur sunt est enim. Et non et aut sit eligendi.	2002-05-01	2021-12-23
+29	repellat	14	2	Mollitia suscipit odit tenetur dolorum inventore unde sit molestiae. Eius voluptas cumque soluta quia aut iste eius suscipit. Dolores hic est expedita sint distinctio.	2020-11-22	2021-12-23
+30	omnis	22	8	Impedit consequatur quia quo. Dicta non nihil sint occaecati occaecati illum eaque eligendi. Est sed dolorem quae accusantium et rem. Non nulla hic ipsum qui blanditiis id.	2019-07-24	2021-12-23
+31	atque	2	18	Cupiditate sequi totam facilis incidunt quia. Quasi aut repudiandae est voluptatum esse dolorem voluptates. Rem et necessitatibus nobis iste iure nemo.	2017-05-03	2021-12-23
+50	dolores	3	11	Sit in quia itaque et harum sed eos. Aspernatur est inventore sit. Voluptatem reprehenderit libero sunt illo ab ea qui. Ea atque et omnis amet.	1989-05-04	2021-12-23
+51	consequatur	7	7	Occaecati eos sunt iure et repellendus qui. Omnis eius eligendi beatae quo molestiae. Sunt sit velit quibusdam facere voluptatem nesciunt est.	2002-03-14	2021-12-23
+53	laborum	16	19	Sunt dignissimos impedit dolorum provident aspernatur rerum quas. Quidem harum expedita excepturi rerum culpa quo. Molestias soluta ipsa consequatur eius. Illum dolore qui voluptas explicabo autem.	2007-01-20	2021-12-23
+56	dignissimos	17	13	Quo quo odit beatae. Autem aut tempore quibusdam eos maxime ut. Eveniet expedita aut maxime officia enim alias. Dolorem et reprehenderit facere nihil.	2019-02-03	2021-12-23
+58	suscipit	13	20	Eos sunt aut molestiae ut velit est. Nihil voluptatem ut labore accusantium at est. Qui aut et non molestias qui sapiente quia.	2002-07-04	2021-12-23
+59	aliquid	7	9	Cum dolorem dignissimos quibusdam amet explicabo repellat. Ut distinctio atque ipsum cumque facilis ipsam. Vel vero totam et qui.	1984-11-06	2021-12-23
+70	perferendis	25	6	Et omnis odit ex sint est qui est ullam. Et praesentium ducimus laudantium vitae eius deleniti saepe quia. Aut omnis accusamus ut qui quaerat. Non commodi fugit sint quia ut.	1998-07-14	2021-12-23
+75	doloremque	16	2	Quia nisi saepe ipsa eos. Et vel sed aut quia reiciendis facilis. Magnam voluptatem autem et eligendi.	1994-12-24	2021-12-23
+77	doloribus	8	2	Adipisci distinctio consequuntur dolores nulla. Quia architecto est totam id dolor. Ut placeat illo nesciunt suscipit dolores ut aperiam. Deleniti voluptatem consequatur iure quibusdam.	1975-04-27	2021-12-23
+84	quas	19	14	Magnam dolorum nisi fuga in voluptatem animi. Quos fugiat sint at consequuntur. Eum non voluptatum at suscipit.\\nAspernatur sed incidunt similique esse eaque. Rerum laudantium esse animi iste.	2003-05-02	2021-12-23
+86	nulla	7	13	Labore et quisquam animi necessitatibus hic voluptatum. Qui sunt ea ut atque et exercitationem vel. Placeat ducimus consequatur in fuga. Eos aut et iure ea illum sed alias nulla.	2009-01-30	2021-12-23
+95	dolor	20	20	Voluptatem adipisci ex quibusdam cupiditate tenetur. Perferendis dolores doloremque placeat quos quis optio tempore. Qui sunt veritatis delectus ullam aut dignissimos dolorum deleniti.	1987-10-28	2021-12-23
+98	veritatis	13	13	Et optio modi velit qui sed ea. Voluptatem qui iure reiciendis. Aut quos voluptas quaerat rerum.	1993-03-11	2021-12-23
+100	enim	4	4	Beatae a fuga iste ut quas. Mollitia eum totam et. Veniam recusandae voluptas sint nulla.	2007-07-26	2021-12-23
 \.
 
 
@@ -1558,29 +1668,9 @@ COPY public.projects (id, name, customer_id, contractor_id, system_ids, comments
 --
 
 COPY public.reports (id, name, project_id, url, tsr_id, started_at, finished_at, created_at, updated_at) FROM stdin;
-14	Est aut consectetur provident qui.	34	http://www.pouros.com/	30	1994-06-27	2005-02-13	1994-07-04 00:00:00	1995-01-04 00:00:00
-34	Provident cumque temporibus officiis quibusdam qui	51	http://www.effertz.com/	28	2017-07-08	2018-10-15	2017-07-15 00:00:00	2018-01-15 00:00:00
-2	Officia impedit aut molestias.	51	http://hermann.info/	11	2012-08-02	2013-02-02	2012-08-09 00:00:00	2013-02-09 00:00:00
-7	Eum porro ratione dolore assumenda.	54	http://konopelski.org/	12	2014-09-27	2015-03-27	2014-10-04 00:00:00	2015-04-04 00:00:00
-9	Exercitationem eius earum ipsa saepe.	30	http://nader.com/	23	2017-06-02	2017-12-02	2017-06-09 00:00:00	2017-12-09 00:00:00
-20	Et quia debitis voluptatibus ut.	52	http://harber.info/	11	2012-10-10	2013-04-10	2012-10-17 00:00:00	2013-04-17 00:00:00
-10	Vel itaque iste veniam rerum qui iusto.	41	http://batz.biz/	19	1993-11-07	2017-03-20	1993-11-14 00:00:00	2015-02-22 00:46:31
 18	Iure sunt quod quos qui sed est deleniti.	52	http://www.hodkiewicz.com/	21	1990-06-06	2007-03-14	1990-06-13 00:00:00	2017-05-07 11:36:41
-26	Consequatur accusamus incidunt voluptatibus vel mo	49	http://www.champlin.info/	29	1997-04-05	1997-10-05	1997-04-12 00:00:00	1997-10-12 00:00:00
-33	Corporis nemo qui quia maxime.	40	http://harris.com/	18	2000-02-18	2000-08-18	2000-02-25 00:00:00	2000-08-25 00:00:00
-22	Sequi aut est eum fugit sed accusantium repellendu	70	http://www.goldner.info/	20	1972-07-13	2014-01-17	1972-07-20 00:00:00	1991-08-28 22:20:37
-23	Quam et officiis laudantium et possimus iure sed.	45	http://www.welch.com/	24	1988-12-07	1991-11-10	1988-12-14 00:00:00	2018-05-19 23:27:58
-45	Veniam rem et est deserunt nam tempore sequi.	49	http://greenmarks.com/	27	2010-02-23	2010-08-23	2010-03-02 00:00:00	2010-09-02 00:00:00
 27	Ea in placeat amet libero reprehenderit corrupti s	31	http://doyle.net/	25	1996-10-09	2006-01-06	1996-10-16 00:00:00	2007-09-07 13:59:10
 53	Sit id et qui autem architecto et.	47	http://rodriguez.com/	26	2016-06-13	2016-12-13	2016-06-20 00:00:00	2016-12-20 00:00:00
-55	Voluptas temporibus consectetur quis facere quae a	63	http://streicherdman.com/	13	2002-05-21	2002-11-21	2002-05-28 00:00:00	2002-11-28 00:00:00
-36	Dolores nihil eius corrupti quos.	69	http://www.schimmel.org/	12	1970-10-09	2007-04-19	1970-10-16 00:00:00	2010-04-17 09:22:42
-38	Fuga fugit consequatur eos nesciunt.	46	http://www.oberbrunner.com/	13	1978-03-31	2013-02-13	1978-04-07 00:00:00	2003-05-29 10:55:44
-43	Aliquid et maiores voluptate magni.	42	http://www.kiehn.net/	27	1987-10-03	1991-09-06	1987-10-10 00:00:00	2019-07-27 00:19:22
-3	Sit ut modi nam et.	53	http://denesik.org/	16	2007-05-07	2007-11-07	2007-05-14 00:00:00	2018-09-25 03:40:48
-4	Amet sapiente et suscipit.	53	http://olson.com/	18	1987-08-13	1988-02-13	1987-08-20 00:00:00	2015-10-27 19:48:46
-8	Fugiat recusandae rerum nemo et.	46	http://www.reynoldsschmitt.com/	19	1998-04-21	1998-10-21	1998-04-28 00:00:00	2012-03-01 23:32:19
-19	Et eveniet culpa accusamus explicabo sunt aperiam.	50	http://www.lindgren.com/	30	1998-10-01	1999-04-01	1998-10-08 00:00:00	2015-05-24 04:04:26
 30	Et nam et doloremque temporibus corporis soluta.	56	http://koss.net/	12	2006-08-10	2007-02-10	2006-08-17 00:00:00	2015-10-22 22:24:45
 35	Deserunt voluptatem vitae accusamus nisi.	59	http://hagenesfunk.biz/	23	1984-07-18	1985-01-18	1984-07-25 00:00:00	2020-06-10 08:30:26
 41	Voluptatem sequi at magni.	35	http://mosciski.com/	16	2018-11-11	2019-05-11	2018-11-18 00:00:00	2020-04-04 16:38:45
@@ -1658,6 +1748,26 @@ COPY public.reports (id, name, project_id, url, tsr_id, started_at, finished_at,
 83	Vel quia eos consequatur eveniet laboriosam.	67	http://parisianjacobson.info/	26	2015-08-17	2016-02-17	2015-08-24 00:00:00	2016-02-24 00:00:00
 96	Nostrum ratione voluptas ut cupiditate quia libero	63	http://jakubowski.biz/	16	2003-05-11	2003-11-11	2003-05-18 00:00:00	2003-11-18 00:00:00
 98	Dolorem quasi aut adipisci ut inventore.	33	http://www.braun.com/	14	2003-03-28	2003-09-28	2003-04-04 00:00:00	2003-10-04 00:00:00
+14	Est aut consectetur provident qui.	1	http://www.pouros.com/	30	1994-06-27	2005-02-13	1994-07-04 00:00:00	1995-01-04 00:00:00
+34	Provident cumque temporibus officiis quibusdam qui	2	http://www.effertz.com/	28	2017-07-08	2018-10-15	2017-07-15 00:00:00	2018-01-15 00:00:00
+2	Officia impedit aut molestias.	4	http://hermann.info/	11	2012-08-02	2013-02-02	2012-08-09 00:00:00	2013-02-09 00:00:00
+7	Eum porro ratione dolore assumenda.	17	http://konopelski.org/	12	2014-09-27	2015-03-27	2014-10-04 00:00:00	2015-04-04 00:00:00
+9	Exercitationem eius earum ipsa saepe.	12	http://nader.com/	23	2017-06-02	2017-12-02	2017-06-09 00:00:00	2017-12-09 00:00:00
+20	Et quia debitis voluptatibus ut.	15	http://harber.info/	11	2012-10-10	2013-04-10	2012-10-17 00:00:00	2013-04-17 00:00:00
+10	Vel itaque iste veniam rerum qui iusto.	18	http://batz.biz/	19	1993-11-07	2017-03-20	1993-11-14 00:00:00	2015-02-22 00:46:31
+26	Consequatur accusamus incidunt voluptatibus vel mo	12	http://www.champlin.info/	29	1997-04-05	1997-10-05	1997-04-12 00:00:00	1997-10-12 00:00:00
+33	Corporis nemo qui quia maxime.	34	http://harris.com/	18	2000-02-18	2000-08-18	2000-02-25 00:00:00	2000-08-25 00:00:00
+22	Sequi aut est eum fugit sed accusantium repellendu	7	http://www.goldner.info/	20	1972-07-13	2014-01-17	1972-07-20 00:00:00	1991-08-28 22:20:37
+23	Quam et officiis laudantium et possimus iure sed.	6	http://www.welch.com/	24	1988-12-07	1991-11-10	1988-12-14 00:00:00	2018-05-19 23:27:58
+45	Veniam rem et est deserunt nam tempore sequi.	8	http://greenmarks.com/	27	2010-02-23	2010-08-23	2010-03-02 00:00:00	2010-09-02 00:00:00
+55	Voluptas temporibus consectetur quis facere quae a	12	http://streicherdman.com/	13	2002-05-21	2002-11-21	2002-05-28 00:00:00	2002-11-28 00:00:00
+36	Dolores nihil eius corrupti quos.	16	http://www.schimmel.org/	12	1970-10-09	2007-04-19	1970-10-16 00:00:00	2010-04-17 09:22:42
+38	Fuga fugit consequatur eos nesciunt.	11	http://www.oberbrunner.com/	13	1978-03-31	2013-02-13	1978-04-07 00:00:00	2003-05-29 10:55:44
+43	Aliquid et maiores voluptate magni.	10	http://www.kiehn.net/	27	1987-10-03	1991-09-06	1987-10-10 00:00:00	2019-07-27 00:19:22
+3	Sit ut modi nam et.	7	http://denesik.org/	16	2007-05-07	2007-11-07	2007-05-14 00:00:00	2018-09-25 03:40:48
+4	Amet sapiente et suscipit.	3	http://olson.com/	18	1987-08-13	1988-02-13	1987-08-20 00:00:00	2015-10-27 19:48:46
+8	Fugiat recusandae rerum nemo et.	10	http://www.reynoldsschmitt.com/	19	1998-04-21	1998-10-21	1998-04-28 00:00:00	2012-03-01 23:32:19
+19	Et eveniet culpa accusamus explicabo sunt aperiam.	17	http://www.lindgren.com/	30	1998-10-01	1999-04-01	1998-10-08 00:00:00	2015-05-24 04:04:26
 \.
 
 
@@ -1828,6 +1938,114 @@ COPY public.tsr (id, first_name, last_name, email) FROM stdin;
 
 
 --
+-- Data for Name: used_systems; Type: TABLE DATA; Schema: public; Owner: gb_user
+--
+
+COPY public.used_systems (project_id, used_system_id) FROM stdin;
+30	2
+2	18
+19	21
+4	11
+10	14
+6	19
+3	4
+17	6
+19	22
+17	11
+20	14
+4	34
+13	22
+21	14
+31	20
+16	15
+15	20
+12	22
+17	21
+17	5
+3	13
+15	7
+6	32
+7	24
+8	9
+14	23
+7	13
+8	10
+19	3
+14	9
+17	17
+12	25
+15	16
+6	10
+7	8
+6	13
+17	18
+11	20
+5	19
+30	20
+17	2
+18	23
+18	17
+15	23
+2	8
+18	22
+10	21
+3	14
+15	3
+13	21
+20	25
+17	12
+17	30
+3	8
+5	2
+11	1
+12	17
+15	11
+10	20
+14	17
+1	14
+8	14
+2	9
+20	11
+17	25
+8	3
+12	15
+9	16
+19	10
+12	1
+12	6
+9	17
+15	22
+6	1
+16	16
+39	21
+18	1
+12	7
+13	2
+17	24
+6	23
+11	15
+28	7
+4	4
+16	21
+9	21
+1	18
+6	17
+20	17
+12	18
+18	16
+16	18
+12	23
+6	4
+9	13
+16	17
+8	7
+7	1
+4	6
+20	2
+\.
+
+
+--
 -- Name: approved_tests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gb_user
 --
 
@@ -1859,7 +2077,7 @@ SELECT pg_catalog.setval('public.catalogs_id_seq', 1, false);
 -- Name: coating_systems_id_seq; Type: SEQUENCE SET; Schema: public; Owner: gb_user
 --
 
-SELECT pg_catalog.setval('public.coating_systems_id_seq', 1, false);
+SELECT pg_catalog.setval('public.coating_systems_id_seq', 103, true);
 
 
 --
@@ -1999,6 +2217,14 @@ ALTER TABLE ONLY public.pds
 
 
 --
+-- Name: products products_name_key; Type: CONSTRAINT; Schema: public; Owner: gb_user
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_name_key UNIQUE (name);
+
+
+--
 -- Name: products products_pkey; Type: CONSTRAINT; Schema: public; Owner: gb_user
 --
 
@@ -2052,6 +2278,21 @@ ALTER TABLE ONLY public.tsr
 
 ALTER TABLE ONLY public.tsr
     ADD CONSTRAINT tsr_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: used_systems used_systems_project_id_used_system_id_key; Type: CONSTRAINT; Schema: public; Owner: gb_user
+--
+
+ALTER TABLE ONLY public.used_systems
+    ADD CONSTRAINT used_systems_project_id_used_system_id_key UNIQUE (project_id, used_system_id);
+
+
+--
+-- Name: coating_systems check_catalog_type; Type: TRIGGER; Schema: public; Owner: gb_user
+--
+
+CREATE TRIGGER check_catalog_type BEFORE INSERT OR UPDATE OF primer_id, intermediate_id, finish_id ON public.coating_systems FOR EACH ROW EXECUTE FUNCTION public.check_coat_types();
 
 
 --
@@ -2119,14 +2360,6 @@ ALTER TABLE ONLY public.approved_tests
 
 
 --
--- Name: projects main_system_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: gb_user
---
-
-ALTER TABLE ONLY public.projects
-    ADD CONSTRAINT main_system_id_fk FOREIGN KEY (main_system_id) REFERENCES public.coating_systems(id);
-
-
---
 -- Name: coating_systems primer_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: gb_user
 --
 
@@ -2175,11 +2408,27 @@ ALTER TABLE ONLY public.approved_tests
 
 
 --
+-- Name: used_systems system_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: gb_user
+--
+
+ALTER TABLE ONLY public.used_systems
+    ADD CONSTRAINT system_id_fk FOREIGN KEY (used_system_id) REFERENCES public.coating_systems(id);
+
+
+--
 -- Name: reports tsr_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: gb_user
 --
 
 ALTER TABLE ONLY public.reports
     ADD CONSTRAINT tsr_id_fk FOREIGN KEY (tsr_id) REFERENCES public.tsr(id);
+
+
+--
+-- Name: used_systems used_systems_project_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: gb_user
+--
+
+ALTER TABLE ONLY public.used_systems
+    ADD CONSTRAINT used_systems_project_id_fk FOREIGN KEY (project_id) REFERENCES public.projects(id);
 
 
 --

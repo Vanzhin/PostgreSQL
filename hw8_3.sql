@@ -23,7 +23,6 @@ ALTER TABLE approved_tests
 	FOREIGN KEY (lab_id) 
 	REFERENCES labs(id);
 	
-
 ALTER TABLE approved_tests 
 	ADD CONSTRAINT system_id_fk
 	FOREIGN KEY (system_id) 
@@ -37,8 +36,7 @@ ALTER TABLE products
 ALTER TABLE products 
 	ADD CONSTRAINT catalog_id_fk
 	FOREIGN KEY (catalog_id) 
-	REFERENCES catalogs(id);
-	
+	REFERENCES catalogs(id);	
 	
 ALTER TABLE projects 
 	ADD CONSTRAINT customer_id_fk
@@ -49,11 +47,16 @@ ALTER TABLE projects
 	ADD CONSTRAINT contractor_id_fk
 	FOREIGN KEY (contractor_id) 
 	REFERENCES contractors(id);
+
+ALTER TABLE used_systems 
+	ADD CONSTRAINT system_id_fk
+	FOREIGN KEY (used_system_id) 
+	REFERENCES coating_systems(id);	
 	
-ALTER TABLE projects 
-	ADD CONSTRAINT main_system_id_fk
-	FOREIGN KEY (main_system_id) 
-	REFERENCES coating_systems(id);
+ALTER TABLE used_systems 
+	ADD CONSTRAINT used_systems_project_id_fk
+	FOREIGN KEY (project_id) 
+	REFERENCES projects(id);	
 
 ALTER TABLE coating_systems 
 	ADD CONSTRAINT primer_id_fk
@@ -79,4 +82,5 @@ ALTER TABLE reports
 	ADD CONSTRAINT tsr_id_fk
 	FOREIGN KEY (tsr_id) 
 	REFERENCES tsr(id);
+	
 		
